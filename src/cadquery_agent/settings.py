@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     max_tokens: int = Field(default=1024, ge=64, le=4096)
     max_attempts: int = Field(default=3, ge=1, le=5)
     max_image_bytes: int = Field(default=10 * 1024 * 1024, ge=1024, le=25 * 1024 * 1024)
+    worker_image: str = "cadquery-agent-worker:local"
+    render_timeout_seconds: float = Field(default=45.0, gt=0, le=120)
 
     @field_validator("base_url")
     @classmethod

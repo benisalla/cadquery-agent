@@ -14,13 +14,13 @@ SUPPORTED_MODELS: dict[str, SupportedModel] = {
         name="qwen2.5vl:3b",
         input_types=("text", "image"),
         approximate_download_gb=3.2,
-        note="Recommended default for this CPU-only 16 GiB machine.",
+        note="Optional image-capable model; needs substantially more free memory.",
     ),
     "qwen2.5-coder:1.5b": SupportedModel(
         name="qwen2.5-coder:1.5b",
         input_types=("text",),
         approximate_download_gb=1.0,
-        note="Fastest text-only option.",
+        note="Recommended reliable text-to-CadQuery model for this machine.",
     ),
     "qwen2.5-coder:3b": SupportedModel(
         name="qwen2.5-coder:3b",
@@ -36,7 +36,7 @@ SUPPORTED_MODELS: dict[str, SupportedModel] = {
     ),
 }
 
-DEFAULT_MODEL = "qwen2.5vl:3b"
+DEFAULT_MODEL = "qwen2.5-coder:1.5b"
 
 
 def require_supported_model(model: str, has_image: bool = False) -> SupportedModel:

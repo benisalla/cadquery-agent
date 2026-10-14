@@ -6,10 +6,14 @@ from cadquery_agent.models import require_supported_model
 from cadquery_agent.validation import extract_python_code, validate_cadquery_source
 
 SYSTEM_TASK = """Write editable Python source using CadQuery.
-Return only Python code. Import only cadquery and optionally numpy. Assign the
-final Workplane, Solid, or Compound to a variable named result. Do not read
-files, access the network, spawn processes, or use dynamic Python execution.
-Prefer explicit millimeter dimensions and simple, editable construction steps."""
+Return only Python code. Use exactly 'import cadquery as cq' and optionally
+'import numpy as np'; never use from-imports or wildcard imports. Start geometry
+with cq.Workplane('XY') and assign the final CadQuery object to result. A valid
+20 mm cube is: result = cq.Workplane('XY').box(20, 20, 20). Do not read files,
+access the network, spawn processes, or use dynamic Python execution. Prefer
+explicit millimeter dimensions and simple, editable construction steps. Do not
+call show(), show_object(), export(), or exporters; the worker handles preview
+and file export after the final result assignment."""
 
 
 class GenerationError(RuntimeError):

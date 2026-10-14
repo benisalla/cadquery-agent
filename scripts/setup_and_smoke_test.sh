@@ -37,7 +37,7 @@ for _ in $(seq 1 60); do
 done
 curl --fail --silent "http://127.0.0.1:11434/api/version" >/dev/null
 
-"$ollama_binary" pull qwen2.5vl:3b
+"$ollama_binary" pull qwen2.5-coder:1.5b
 "$project_root/.venv/bin/cadquery-agent" generate --prompt "Create a 20 mm cube and assign the final CadQuery object to result." --output "$artifacts_dir/smoke_test_part.py"
 
 echo "Local model setup and real generation smoke test completed."

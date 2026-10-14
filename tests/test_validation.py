@@ -2,12 +2,17 @@ from cadquery_agent.validation import extract_python_code, validate_cadquery_sou
 
 
 def test_accepts_basic_cadquery_source() -> None:
-    source = "import cadquery as cq\nresult = cq.Workplane('XY').box(1, 2, 3)"
+    source = """import cadquery as cq
+result = cq.Workplane('XY').box(1, 2, 3)"""
     assert validate_cadquery_source(source).is_valid
 
 
 def test_rejects_file_access_and_unapproved_imports() -> None:
-    result = validate_cadquery_source("import os\nresult = open(os.devnull)")
+    result = validate_cadquery_source(
+        """import os
+import cadquery as cq
+result = open(os.devnull)"""
+    )
     assert not result.is_valid
     assert "import is not allowed: os" in result.errors
     assert "call is not allowed: open" in result.errors
@@ -15,5 +20,34 @@ def test_rejects_file_access_and_unapproved_imports() -> None:
 
 def test_extracts_markdown_fenced_code() -> None:
     marker = chr(96) * 3
-    response = f"Here is the code:\n{marker}python\nresult = 1\n{marker}"
+    response = f"""Here is the code:
+{marker}python
+result = 1
+{marker}"""
     assert extract_python_code(response) == "result = 1"
+
+
+def test_rejects_wildcard_cadquery_imports() -> None:
+    source = """from cadquery import *
+result = Workplane('XY').box(1, 2, 3)"""
+    result = validate_cadquery_source(source)
+    assert not result.is_valid
+    assert "from-imports and wildcard imports are not allowed" in result.errors
+    assert "code must construct geometry with cq.Workplane(...)" in result.errors
+
+
+def test_requires_canonical_cadquery_alias() -> None:
+    source = """import cadquery
+result = cadquery.Workplane('XY').box(1, 2, 3)"""
+    result = validate_cadquery_source(source)
+    assert not result.is_valid
+    assert "import cadquery must use alias cq" in result.errors
+
+
+def test_rejects_display_calls_that_do_not_work_in_the_worker() -> None:
+    source = """import cadquery as cq
+result = cq.Workplane('XY').box(20, 20, 20)
+result.show()"""
+    result = validate_cadquery_source(source)
+    assert not result.is_valid
+    assert "method call is not allowed: show" in result.errors

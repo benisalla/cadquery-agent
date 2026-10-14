@@ -1,8 +1,8 @@
 import ast
 from dataclasses import dataclass
 
-_ALLOWED_IMPORT_ROOTS = {"cadquery", "numpy"}
 _BLOCKED_CALLS = {"compile", "eval", "exec", "input", "open", "__import__"}
+_BLOCKED_METHODS = {"export", "show", "show_object"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,15 +37,19 @@ def validate_cadquery_source(source: str) -> ValidationResult:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name.split(".", 1)[0] not in _ALLOWED_IMPORT_ROOTS:
+                expected_alias = {"cadquery": "cq", "numpy": "np"}.get(alias.name)
+                if expected_alias is None:
                     errors.append(f"import is not allowed: {alias.name}")
+                elif alias.asname != expected_alias:
+                    errors.append(f"import {alias.name} must use alias {expected_alias}")
         elif isinstance(node, ast.ImportFrom):
-            module = node.module or ""
-            if module.split(".", 1)[0] not in _ALLOWED_IMPORT_ROOTS:
-                errors.append(f"import is not allowed: {module or '<relative>'}")
+            errors.append("from-imports and wildcard imports are not allowed")
         elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
             if node.func.id in _BLOCKED_CALLS:
                 errors.append(f"call is not allowed: {node.func.id}")
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            if node.func.attr in _BLOCKED_METHODS:
+                errors.append(f"method call is not allowed: {node.func.attr}")
         elif isinstance(node, ast.Attribute) and node.attr.startswith("__"):
             errors.append(f"dunder attribute is not allowed: {node.attr}")
 
@@ -60,4 +64,15 @@ def validate_cadquery_source(source: str) -> ValidationResult:
 
     if not assigned_names.intersection({"result", "solid"}):
         errors.append("code must assign the final CadQuery object to result or solid")
+
+    has_workplane = any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "Workplane"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "cq"
+        for node in ast.walk(tree)
+    )
+    if not has_workplane:
+        errors.append("code must construct geometry with cq.Workplane(...)")
     return ValidationResult(is_valid=not errors, errors=tuple(dict.fromkeys(errors)))
