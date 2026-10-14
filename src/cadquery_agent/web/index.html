@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CadQuery Agent</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #0b1020; color: #e8ecf6; }
+    main { width: min(960px, calc(100% - 32px)); margin: 0 auto; padding: 48px 0; }
+    header { margin-bottom: 28px; }
+    h1 { margin: 0 0 8px; font-size: clamp(2rem, 6vw, 3.5rem); letter-spacing: -0.04em; }
+    header p { margin: 0; color: #aab4cc; max-width: 680px; line-height: 1.6; }
+    .status { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+    .pill { padding: 7px 11px; border: 1px solid #293657; border-radius: 999px; color: #b9c5df; font-size: .85rem; }
+    .dot { display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: #36d399; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .card { border: 1px solid #25304d; border-radius: 18px; background: #11182b; padding: 22px; box-shadow: 0 18px 50px #0004; }
+    .output { grid-column: 1 / -1; }
+    label { display: block; margin-bottom: 9px; font-size: .9rem; color: #c5cee2; font-weight: 650; }
+    textarea, input[type=file] { width: 100%; border: 1px solid #34415f; border-radius: 11px; background: #0b1120; color: #eef2ff; }
+    textarea { min-height: 170px; padding: 14px; resize: vertical; font: inherit; line-height: 1.5; }
+    input[type=file] { padding: 12px; }
+    .hint { color: #8996b2; font-size: .82rem; line-height: 1.5; }
+    .actions { display: flex; gap: 10px; margin-top: 16px; }
+    button { border: 0; border-radius: 11px; padding: 12px 17px; font-weight: 750; cursor: pointer; }
+    #generate { background: #7c9cff; color: #071027; }
+    #generate:disabled { opacity: .55; cursor: wait; }
+    #copy { background: #25304d; color: #e8ecf6; }
+    pre { min-height: 220px; max-height: 520px; overflow: auto; margin: 12px 0 0; padding: 18px; border-radius: 12px; background: #080d19; color: #cfe1ff; line-height: 1.55; white-space: pre-wrap; }
+    .message { min-height: 24px; margin-top: 12px; color: #aab4cc; }
+    .error { color: #ff8e9d; }
+    @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } .output { grid-column: auto; } main { padding: 28px 0; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>CadQuery Agent</h1>
+      <p>Describe a part, attach a reference image, or use both. Generation stays on this machine and returned Python is checked but never executed.</p>
+      <div class="status">
+        <span class="pill"><span class="dot"></span>Local-only</span>
+        <span class="pill" id="model">Loading model configuration…</span>
+      </div>
+    </header>
+    <form id="form" class="grid">
+      <section class="card">
+        <label for="prompt">Part description</label>
+        <textarea id="prompt" placeholder="Example: A 30 mm cube with a centered 10 mm through-hole on the top face"></textarea>
+        <p class="hint">Include dimensions, units, symmetry, holes, fillets, and any manufacturing constraints you know.</p>
+      </section>
+      <section class="card">
+        <label for="image">Reference image (optional)</label>
+        <input id="image" type="file" accept="image/png,image/jpeg,image/webp">
+        <p class="hint">PNG, JPEG, or WebP up to 10 MB. Image dimensions are estimates unless measurements or scale are visible.</p>
+        <div class="actions"><button id="generate" type="submit">Generate CadQuery</button></div>
+        <div id="message" class="message" aria-live="polite"></div>
+      </section>
+      <section class="card output">
+        <div class="actions"><strong>Validated Python</strong><button id="copy" type="button">Copy</button></div>
+        <pre id="code">Your generated CadQuery script will appear here.</pre>
+      </section>
+    </form>
+  </main>
+  <script>
+    const form = document.querySelector('#form');
+    const promptInput = document.querySelector('#prompt');
+    const imageInput = document.querySelector('#image');
+    const button = document.querySelector('#generate');
+    const message = document.querySelector('#message');
+    const code = document.querySelector('#code');
+    fetch('/config').then(function (response) { return response.json(); }).then(function (data) {
+      document.querySelector('#model').textContent = data.model;
+    }).catch(function () { document.querySelector('#model').textContent = 'Configuration unavailable'; });
+    form.addEventListener('submit', async function (event) {
+      event.preventDefault();
+      const prompt = promptInput.value.trim();
+      const image = imageInput.files[0];
+      if (!prompt && !image) { message.textContent = 'Add a description, an image, or both.'; message.className = 'message error'; return; }
+      button.disabled = true; message.textContent = 'Generating locally. CPU inference can take a few minutes…'; message.className = 'message';
+      try {
+        let response;
+        if (image) {
+          const body = new FormData(); body.append('image', image); body.append('prompt', prompt);
+          response = await fetch('/generate-image', { method: 'POST', body: body });
+        } else {
+          response = await fetch('/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: prompt }) });
+        }
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Generation failed');
+        code.textContent = data.code;
+        message.textContent = 'Validated with ' + data.model + ' in ' + data.attempts + ' attempt(s). Review before execution.';
+      } catch (error) { message.textContent = error.message; message.className = 'message error'; }
+      finally { button.disabled = false; }
+    });
+    document.querySelector('#copy').addEventListener('click', async function () {
+      await navigator.clipboard.writeText(code.textContent); message.textContent = 'Copied to clipboard.'; message.className = 'message';
+    });
+  </script>
+</body>
+</html>
