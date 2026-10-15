@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 
 from cadquery_agent.agent import CadQueryAgent, GenerationResult
 from cadquery_agent.rendering import DockerCadRenderer, RenderError, RenderResult
+from cadquery_agent.validation import validate_cadquery_source
 
 
 class ProjectNotFoundError(LookupError):
@@ -15,6 +16,10 @@ class ProjectNotFoundError(LookupError):
 
 class RevisionNotFoundError(LookupError):
     """The requested project revision does not exist."""
+
+
+class SourceValidationError(ValueError):
+    """Manually edited source failed the deterministic safety checks."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +138,39 @@ class ProjectWorkflow:
                 code=generated.code,
                 model=generated.model,
                 attempts=generated.attempts,
+                run_id=rendered.run_id,
+                created_at=datetime.now(UTC).isoformat(),
+            )
+            return self.store.append(project_id, revision), revision
+
+    async def save_source(
+        self,
+        project_id: str,
+        source: str,
+        base_revision: int | None = None,
+    ) -> tuple[CadProject, ProjectRevision]:
+        normalized_source = source.strip()
+        validation = validate_cadquery_source(normalized_source)
+        if not validation.is_valid:
+            raise SourceValidationError("; ".join(validation.errors))
+
+        lock = self.store.lock_for(project_id)
+        async with lock:
+            project = self.store.get(project_id)
+            base_source = self._base_source(project, base_revision)
+            if base_source is not None and base_source.strip() == normalized_source:
+                raise SourceValidationError("make a code change before running it")
+            rendered = await self.renderer.render(normalized_source)
+            selected_number = base_revision
+            if selected_number is None and project.revisions:
+                selected_number = project.revisions[-1].number
+            origin = f"v{selected_number}" if selected_number is not None else "new design"
+            revision = ProjectRevision(
+                number=len(project.revisions) + 1,
+                instruction=f"Manual code edit from {origin}",
+                code=normalized_source,
+                model="manual",
+                attempts=1,
                 run_id=rendered.run_id,
                 created_at=datetime.now(UTC).isoformat(),
             )

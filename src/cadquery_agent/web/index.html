@@ -19,7 +19,7 @@
     .badge { border: 1px solid var(--line); border-radius: 999px; padding: 7px 11px; color: #b8c5dd; font-size: .78rem; }
     button { border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; background: #1a2539; color: #edf3ff; font-weight: 700; }
     button:hover { border-color: #53698f; }
-    .workspace { height: calc(100vh - 68px); display: grid; grid-template-columns: 250px minmax(420px,1fr) 360px; }
+    .workspace { height: calc(100vh - 68px); display: grid; grid-template-columns: 240px minmax(420px,1fr) minmax(420px,32vw); }
     .sidebar, .inspector { min-width: 0; padding: 16px; background: #0c121f; overflow: auto; }
     .sidebar { border-right: 1px solid var(--line); }
     .inspector { border-left: 1px solid var(--line); }
@@ -48,11 +48,18 @@
     #build:disabled { opacity:.55; cursor:wait; }
     .examples { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 16px; }
     .chip { padding:6px 8px; font-size:.72rem; color:#aebbd1; background:#131d2e; }
-    .code-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
-    #code { min-height:340px; margin:0; padding:14px; overflow:auto; border:1px solid var(--line); border-radius:10px; background:#070c14; color:#cfe0ff; font: .78rem/1.55 ui-monospace,SFMono-Regular,Consolas,monospace; white-space:pre; }
+    .code-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+    .code-actions { display:flex; gap:7px; }
+    .editor-shell { position:relative; display:grid; grid-template-columns:44px 1fr; height:calc(100vh - 255px); min-height:420px; overflow:hidden; border:1px solid var(--line); border-radius:10px; background:#070c14; }
+    #lines { margin:0; padding:14px 9px; overflow:hidden; border-right:1px solid #1b2639; color:#53627a; background:#090f19; text-align:right; user-select:none; font:.78rem/1.55 ui-monospace,SFMono-Regular,Consolas,monospace; }
+    #code { width:100%; height:100%; min-height:0; resize:none; margin:0; padding:14px; overflow:auto; border:0; border-radius:0; outline:0; background:#070c14; color:#cfe0ff; caret-color:#fff; tab-size:2; white-space:pre; font:.78rem/1.55 ui-monospace,SFMono-Regular,Consolas,monospace; }
+    #code:focus { box-shadow:inset 0 0 0 1px #5877b8; }
+    #run-code { background:#2c895f; border-color:#3aa574; }
+    #run-code:disabled, #reset-code:disabled { opacity:.5; cursor:not-allowed; }
+    #dirty { color:#f0bd64; font-size:.72rem; white-space:nowrap; }
     .safe-note { color:var(--muted); font-size:.76rem; line-height:1.5; margin-top:12px; }
     .error { color:#ff9cac !important; }
-    @media (max-width:1050px) { body{overflow:auto}.workspace{height:auto;grid-template-columns:210px 1fr}.inspector{grid-column:1/-1;border-left:0;border-top:1px solid var(--line)}.stage{min-height:720px} }
+    @media (max-width:1150px) { body{overflow:auto}.workspace{height:auto;grid-template-columns:210px 1fr}.inspector{grid-column:1/-1;border-left:0;border-top:1px solid var(--line)}.stage{min-height:720px}.editor-shell{height:560px} }
     @media (max-width:700px) { .badge{display:none}.workspace{display:block}.sidebar{border-right:0;border-bottom:1px solid var(--line)}.stage{min-height:700px}.viewer-wrap{height:500px}.inspector{border-top:1px solid var(--line)} }
   </style>
   <script type="importmap">
@@ -82,14 +89,15 @@
       </form>
     </section>
     <aside class="inspector">
-      <div class="code-head"><div class="label">Editable CadQuery Python</div><button id="copy">Copy</button></div>
+      <div class="code-head"><div><div class="label">CadQuery Python</div><span id="dirty"></span></div><div class="code-actions"><button id="reset-code" disabled>Reset</button><button id="copy">Copy</button><button id="run-code" disabled>▶ Run code</button></div></div>
       <div class="examples">
-        <button class="chip" data-prompt="Add four 6 mm mounting holes, each 10 mm from the nearest corner">+ mounting holes</button>
-        <button class="chip" data-prompt="Add 3 mm fillets to the outside vertical edges">+ edge fillets</button>
-        <button class="chip" data-prompt="Add a centered cylindrical boss on the top face, 24 mm diameter and 12 mm tall">+ top boss</button>
+        <button class="chip" data-prompt="Add ">＋ Add part</button>
+        <button class="chip" data-prompt="Change ">✎ Change</button>
+        <button class="chip" data-prompt="Remove ">− Remove part</button>
+        <button class="chip" data-prompt="Enhance ">✦ Enhance</button>
       </div>
-      <pre id="code">The complete parametric script for the selected revision will appear here.</pre>
-      <p class="safe-note">Each step is validated and built in an isolated, no-network worker before it is saved. Select an older revision to inspect it or branch from it.</p>
+      <div class="editor-shell"><pre id="lines">1</pre><textarea id="code" spellcheck="false" aria-label="Editable CadQuery Python"></textarea></div>
+      <p class="safe-note">Edit any dimension or construction step, then press <strong>Run code</strong> (Ctrl/⌘ + Enter). AI and manual runs are validated in an isolated, no-network worker and saved as new revisions.</p>
     </aside>
   </main>
   <script type="module">
@@ -120,10 +128,18 @@
         camera.near=r/1000;camera.far=r*100;camera.position.set(r*1.65,r*1.25,r*1.65);controls.target.set(0,0,0);controls.update();camera.updateProjectionMatrix();
       },undefined,()=>setStatus('Preview failed to load, but the saved revision is still available.',true));
     }
-    const history=document.querySelector('#history'), code=document.querySelector('#code'), status=document.querySelector('#status');
+    const history=document.querySelector('#history'), code=document.querySelector('#code'), lines=document.querySelector('#lines'), status=document.querySelector('#status');
     const prompt=document.querySelector('#prompt'), build=document.querySelector('#build'), nameInput=document.querySelector('#project-name');
     const step=document.querySelector('#step'),stl=document.querySelector('#stl'),title=document.querySelector('#revision-title');
+    const runCode=document.querySelector('#run-code'),resetCode=document.querySelector('#reset-code'),dirty=document.querySelector('#dirty');
+    const starterCode="import cadquery as cq\n\n# Change these values, then run the code\nlength = 40\nwidth = 30\nheight = 10\n\nresult = cq.Workplane('XY').box(length, width, height)";
     function setStatus(text,isError=false){status.textContent=text;status.className=isError?'error':''}
+    function updateEditorState(){
+      const count=Math.max(1,code.value.split('\n').length);lines.textContent=Array.from({length:count},(_,i)=>i+1).join('\n');
+      const changed=selectedRevision?code.value!==selectedRevision.code:code.value!==starterCode;
+      dirty.textContent=changed?'● Unsaved changes':'';runCode.disabled=!code.value.trim()||!changed;resetCode.disabled=!changed;
+    }
+    function setEditor(source){code.value=source;code.scrollTop=0;lines.scrollTop=0;updateEditorState()}
     function renderHistory(){
       history.innerHTML='';
       if(!project||!project.revisions.length){history.innerHTML='<div class="empty-history">Your verified build steps will appear here. Start with the main body, then add one feature at a time.</div>';return}
@@ -134,7 +150,7 @@
       });
     }
     function selectRevision(revision){
-      selectedRevision=revision;renderHistory();code.textContent=revision.code;title.textContent='Revision '+revision.number+' · '+revision.instruction;
+      selectedRevision=revision;renderHistory();setEditor(revision.code);title.textContent='Revision '+revision.number+' · '+revision.instruction;
       step.href=revision.step_url;stl.href=revision.stl_url;step.style.display=stl.style.display='inline-block';
       showModel(revision.stl_url+'?v='+encodeURIComponent(revision.run_id));
       build.textContent='Build next step';setStatus('Building from revision '+revision.number+' · select another revision to branch from it');
@@ -158,11 +174,27 @@
         project=data;nameInput.value=project.name;prompt.value='';selectRevision(project.revisions.at(-1));setStatus('Step '+selectedRevision.number+' verified and saved · continue with the next feature');
       }catch(error){setStatus(error.message,true)}finally{build.disabled=false}
     });
-    document.querySelector('#new-project').addEventListener('click',()=>{project=null;selectedRevision=null;localStorage.removeItem('cadquery-project-id');nameInput.value='Untitled design';history.innerHTML='';renderHistory();code.textContent='The complete parametric script for the selected revision will appear here.';title.textContent='No model yet';step.style.display=stl.style.display='none';if(mesh){scene.remove(mesh);mesh=null}empty.style.display='grid';build.textContent='Build first part';setStatus('New project ready · describe the base shape')});
-    document.querySelectorAll('.chip').forEach(chip=>chip.addEventListener('click',()=>{prompt.value=chip.dataset.prompt;prompt.focus()}));
-    document.querySelector('#copy').addEventListener('click',async()=>{await navigator.clipboard.writeText(code.textContent);setStatus('CadQuery source copied')});
+    document.querySelector('#new-project').addEventListener('click',()=>{project=null;selectedRevision=null;localStorage.removeItem('cadquery-project-id');nameInput.value='Untitled design';history.innerHTML='';renderHistory();setEditor(starterCode);title.textContent='New code';step.style.display=stl.style.display='none';if(mesh){scene.remove(mesh);mesh=null}empty.style.display='grid';build.textContent='Build first part';setStatus('New project ready · use a prompt or edit and run the starter code')});
+    document.querySelectorAll('.chip').forEach(chip=>chip.addEventListener('click',()=>{prompt.value=chip.dataset.prompt;prompt.focus();prompt.setSelectionRange(prompt.value.length,prompt.value.length)}));
+    document.querySelector('#copy').addEventListener('click',async()=>{await navigator.clipboard.writeText(code.value);setStatus('CadQuery source copied')});
+    code.addEventListener('input',updateEditorState);
+    code.addEventListener('scroll',()=>{lines.scrollTop=code.scrollTop});
+    code.addEventListener('keydown',event=>{
+      if(event.key==='Tab'){event.preventDefault();const start=code.selectionStart,end=code.selectionEnd;code.setRangeText('  ',start,end,'end');updateEditorState()}
+      if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();runCode.click()}
+    });
+    resetCode.addEventListener('click',()=>{setEditor(selectedRevision?.code||starterCode);setStatus('Code reset to the selected revision')});
+    runCode.addEventListener('click',async()=>{
+      if(runCode.disabled)return;runCode.disabled=true;build.disabled=true;setStatus('Validating and running your code in the isolated CAD worker…');
+      try{
+        if(!project)await createProject();
+        const response=await fetch('/projects/'+encodeURIComponent(project.project_id)+'/source',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:code.value,base_revision:selectedRevision?.number??null})});
+        const data=await response.json();if(!response.ok)throw new Error(data.detail||'Code run failed');
+        project=data;selectRevision(project.revisions.at(-1));setStatus('Code verified, rendered, and saved as revision '+selectedRevision.number);
+      }catch(error){setStatus(error.message,true);updateEditorState()}finally{build.disabled=false}
+    });
     fetch('/config').then(r=>r.json()).then(data=>document.querySelector('#model').textContent='Local · '+data.model);
-    loadProject().catch(()=>setStatus('Could not restore the previous project',true));
+    setEditor(starterCode);loadProject().catch(()=>setStatus('Could not restore the previous project',true));
   </script>
 </body>
 </html>

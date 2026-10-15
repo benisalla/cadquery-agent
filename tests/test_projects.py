@@ -2,7 +2,7 @@ import asyncio
 from pathlib import Path
 
 from cadquery_agent.agent import GenerationResult
-from cadquery_agent.projects import ProjectStore, ProjectWorkflow
+from cadquery_agent.projects import ProjectStore, ProjectWorkflow, SourceValidationError
 from cadquery_agent.rendering import RenderError, RenderResult
 
 
@@ -104,3 +104,36 @@ def test_runtime_failure_is_repaired_before_revision_is_saved(tmp_path: Path) ->
     assert revision.attempts == 2
     assert "box(9, 9, 9)" in revision.code
     assert len(updated.revisions) == 1
+
+
+def test_manual_source_is_validated_rendered_and_saved(tmp_path: Path) -> None:
+    store = ProjectStore(tmp_path)
+    project = store.create("Editable block")
+    renderer = RecordingRenderer()
+    workflow = ProjectWorkflow(store, RecordingAgent(), renderer)
+    source = "import cadquery as cq\nsize = 12\nresult = cq.Workplane('XY').box(size, 8, 4)"
+
+    updated, revision = asyncio.run(workflow.save_source(project.project_id, source))
+
+    assert renderer.calls == 1
+    assert revision.code == source
+    assert revision.model == "manual"
+    assert revision.instruction == "Manual code edit from new design"
+    assert updated.revisions == (revision,)
+
+
+def test_invalid_manual_source_is_not_rendered_or_saved(tmp_path: Path) -> None:
+    store = ProjectStore(tmp_path)
+    project = store.create("Safe editor")
+    renderer = RecordingRenderer()
+    workflow = ProjectWorkflow(store, RecordingAgent(), renderer)
+
+    try:
+        asyncio.run(workflow.save_source(project.project_id, "open('/tmp/file')"))
+    except SourceValidationError as error:
+        assert "call is not allowed: open" in str(error)
+    else:
+        raise AssertionError("unsafe source should be rejected")
+
+    assert renderer.calls == 0
+    assert store.get(project.project_id).revisions == ()

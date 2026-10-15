@@ -24,6 +24,8 @@ flowchart LR
 - Shows an interactive Three.js preview and provides STL and STEP downloads.
 - Keeps local projects with immutable revision history for prompt-by-prompt builds.
 - Lets any older revision become the base for a new branch.
+- Shows the complete editable CadQuery source beside the live 3D preview.
+- Runs manual source edits as verified revisions with Ctrl/Command + Enter.
 - Repairs some CadQuery runtime failures automatically before saving a step.
 
 ## Recommended models for this machine
@@ -102,6 +104,17 @@ Ollama server, and opens the API on loopback:
 Open http://127.0.0.1:8000, describe the base part, and select **Build first part**.
 Rotate and zoom the result, inspect its editable Python, or download STEP/STL.
 
+The studio supports two workflows at the same time:
+
+- Use **Add part**, **Change**, **Remove part**, or **Enhance** to describe an AI
+  revision in plain language.
+- Edit the complete Python source directly and select **Run code** to change a
+  dimension or construction operation precisely.
+
+Manual edits and prompt-based changes both become immutable revisions only
+after static validation and a successful isolated render. **Reset** restores
+the selected revision without affecting its saved geometry.
+
 ### Build a complex object step by step
 
 Start with the largest base feature, then use one prompt per mechanical change:
@@ -139,10 +152,13 @@ Output defaults to artifacts/generated_part.py. Choose another path with
 uvicorn cadquery_agent.api:app --host 127.0.0.1 --port 8000
 ~~~
 
-Open http://127.0.0.1:8000/docs for the API. POST /models/generate creates a
-text-driven model; POST /models/generate-image accepts an image and optional
-prompt. The older /generate endpoints remain available for code-only use.
-GET /health is a model-independent liveness check.
+Open http://127.0.0.1:8000/docs for the API. POST
+/projects/{project_id}/steps creates an AI revision and POST
+/projects/{project_id}/source validates, renders, and saves a manual source
+revision. POST /models/generate creates a text-driven model; POST
+/models/generate-image accepts an image and optional prompt. The older
+/generate endpoints remain available for code-only use. GET /health is a
+model-independent liveness check.
 
 ## Tests
 

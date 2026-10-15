@@ -14,6 +14,7 @@ from cadquery_agent.projects import (
     ProjectStore,
     ProjectWorkflow,
     RevisionNotFoundError,
+    SourceValidationError,
 )
 from cadquery_agent.rendering import DockerCadRenderer, RenderError, artifact_path
 from cadquery_agent.settings import Settings, get_settings
@@ -50,6 +51,11 @@ class CreateProjectRequest(BaseModel):
 
 class ProjectStepRequest(BaseModel):
     instruction: str = Field(min_length=1, max_length=8_000)
+    base_revision: int | None = Field(default=None, ge=1)
+
+
+class ProjectSourceRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=100_000)
     base_revision: int | None = Field(default=None, ge=1)
 
 
@@ -121,7 +127,7 @@ def project_response(project: CadProject) -> ProjectResponse:
     )
 
 
-app = FastAPI(title="CadQuery Studio", version="0.2.0")
+app = FastAPI(title="CadQuery Studio", version="0.3.0")
 _INDEX_HTML = Path(__file__).with_name("web") / "index.html"
 
 
@@ -176,6 +182,27 @@ async def add_project_step(
         raise HTTPException(status_code=404, detail=str(error)) from error
     except (ModelServerError, GenerationError) as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
+    except RenderError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    return project_response(project)
+
+
+@app.post("/projects/{project_id}/source", response_model=ProjectResponse)
+async def save_project_source(
+    project_id: str,
+    request: ProjectSourceRequest,
+    workflow: Annotated[ProjectWorkflow, Depends(get_project_workflow)],
+) -> ProjectResponse:
+    try:
+        project, _ = await workflow.save_source(
+            project_id=project_id,
+            source=request.code,
+            base_revision=request.base_revision,
+        )
+    except (ProjectNotFoundError, RevisionNotFoundError) as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except SourceValidationError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
     except RenderError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     return project_response(project)

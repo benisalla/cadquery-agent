@@ -50,6 +50,8 @@ def test_interface_is_available() -> None:
     assert response.status_code == 200
     assert "CadQuery Studio" in response.text
     assert "Build next step" in response.text
+    assert "Run code" in response.text
+    assert "Remove part" in response.text
     assert "STLLoader" in response.text
 
 
@@ -99,3 +101,27 @@ def test_project_api_creates_and_appends_a_build_step(tmp_path) -> None:
     assert stepped.json()["name"] == "Robot arm"
     assert stepped.json()["revisions"][0]["instruction"] == "Create the mounting base"
     assert stepped.json()["revisions"][0]["stl_url"].endswith("model.stl")
+
+
+def test_project_api_runs_manually_edited_source(tmp_path) -> None:
+    store = ProjectStore(tmp_path / "projects")
+    workflow = ProjectWorkflow(store, FakeAgent(), FakeRenderer())
+    app.dependency_overrides[get_project_store] = lambda: store
+    app.dependency_overrides[get_project_workflow] = lambda: workflow
+    source = "import cadquery as cq\nsize = 25\nresult = cq.Workplane('XY').box(size, 10, 5)"
+    try:
+        with TestClient(app) as client:
+            project_id = client.post("/projects", json={"name": "Code edit"}).json()[
+                "project_id"
+            ]
+            response = client.post(
+                f"/projects/{project_id}/source",
+                json={"code": source},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    revision = response.json()["revisions"][0]
+    assert revision["code"] == source
+    assert revision["model"] == "manual"
