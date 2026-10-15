@@ -3,132 +3,166 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CadQuery Agent</title>
+  <title>CadQuery Studio</title>
   <style>
-    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; --panel:#101827; --line:#26334c; --muted:#8e9bb2; --accent:#8babff; }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; background: #080c16; color: #edf2ff; }
-    main { width: min(1180px, calc(100% - 32px)); margin: auto; padding: 32px 0 48px; }
-    header { display: flex; justify-content: space-between; gap: 24px; align-items: end; margin-bottom: 22px; }
-    h1 { margin: 0 0 6px; font-size: clamp(2rem, 5vw, 3.4rem); letter-spacing: -.045em; }
-    header p { margin: 0; color: #9caac4; line-height: 1.5; }
-    .pill { border: 1px solid #2d3b59; border-radius: 999px; padding: 8px 12px; color: #b9c7e3; white-space: nowrap; }
-    .layout { display: grid; grid-template-columns: minmax(290px, .72fr) minmax(420px, 1.28fr); gap: 18px; }
-    .card { border: 1px solid #24304a; border-radius: 18px; background: #101727; padding: 20px; box-shadow: 0 20px 70px #0006; }
-    label { display: block; margin-bottom: 9px; font-weight: 700; }
-    textarea, input[type=file] { width: 100%; border: 1px solid #354460; border-radius: 11px; background: #080e1b; color: #eef3ff; }
-    textarea { min-height: 180px; padding: 14px; resize: vertical; font: inherit; line-height: 1.5; }
-    input[type=file] { padding: 11px; margin-top: 6px; }
-    .hint { color: #8997b1; font-size: .84rem; line-height: 1.5; }
-    button, .download { border: 0; border-radius: 11px; padding: 12px 16px; font-weight: 750; cursor: pointer; text-decoration: none; }
-    #generate { width: 100%; margin-top: 10px; background: #8cacff; color: #071027; }
-    #generate:disabled { opacity: .55; cursor: wait; }
-    .message { min-height: 44px; margin-top: 14px; color: #aab6cc; line-height: 1.45; }
-    .error { color: #ff9aaa; }
-    #viewer { position: relative; height: 520px; overflow: hidden; border-radius: 13px; background: radial-gradient(circle at 50% 35%, #1a2942, #090e19 70%); }
-    #viewer canvas { display: block; width: 100%; height: 100%; }
-    #empty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: #8592aa; padding: 40px; pointer-events: none; }
-    .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-    .downloads { display: flex; gap: 8px; }
-    .download { display: none; background: #24324e; color: #e8efff; font-size: .86rem; }
-    details { margin-top: 18px; }
-    summary { cursor: pointer; color: #b9c6df; }
-    pre { max-height: 360px; overflow: auto; padding: 16px; border-radius: 11px; background: #070c16; color: #cfe1ff; line-height: 1.5; white-space: pre-wrap; }
-    @media (max-width: 820px) { header { align-items: start; flex-direction: column; } .layout { grid-template-columns: 1fr; } #viewer { height: 420px; } }
+    body { margin: 0; min-height: 100vh; overflow: hidden; background: #080c15; color: #eef3ff; }
+    button, input, textarea { font: inherit; }
+    button { cursor: pointer; }
+    .topbar { height: 68px; padding: 0 22px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); background: #0c121f; }
+    .brand { display: flex; align-items: center; gap: 13px; }
+    .mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: linear-gradient(135deg,#9cb7ff,#597de5); color:#09101e; font-weight:900; }
+    h1 { margin: 0; font-size: 1rem; letter-spacing: -.01em; }
+    .subtitle { color: var(--muted); font-size: .77rem; margin-top: 2px; }
+    .top-actions { display: flex; align-items: center; gap: 10px; }
+    .badge { border: 1px solid var(--line); border-radius: 999px; padding: 7px 11px; color: #b8c5dd; font-size: .78rem; }
+    button { border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; background: #1a2539; color: #edf3ff; font-weight: 700; }
+    button:hover { border-color: #53698f; }
+    .workspace { height: calc(100vh - 68px); display: grid; grid-template-columns: 250px minmax(420px,1fr) 360px; }
+    .sidebar, .inspector { min-width: 0; padding: 16px; background: #0c121f; overflow: auto; }
+    .sidebar { border-right: 1px solid var(--line); }
+    .inspector { border-left: 1px solid var(--line); }
+    .label { color: var(--muted); font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    #project-name { width: 100%; margin: 9px 0 18px; border: 1px solid var(--line); border-radius: 9px; padding: 10px; background:#080e19; color:#eef3ff; font-weight:700; }
+    .history { display: grid; gap: 8px; margin-top: 10px; }
+    .revision { width: 100%; text-align: left; padding: 11px; background: #101827; }
+    .revision.active { border-color: var(--accent); background: #16233a; box-shadow: inset 3px 0 var(--accent); }
+    .revision strong { display: block; color: #dfe8fa; font-size: .83rem; }
+    .revision span { display: block; margin-top: 5px; color: var(--muted); font-size: .76rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .empty-history { color: var(--muted); line-height: 1.5; font-size: .84rem; padding: 15px 2px; }
+    .stage { min-width: 0; display: grid; grid-template-rows: 1fr auto; background: #090e18; }
+    .viewer-wrap { min-height: 0; padding: 16px; }
+    .viewer-head { height: 38px; display:flex; align-items:start; justify-content:space-between; gap:12px; }
+    #revision-title { font-size: .9rem; }
+    .downloads { display:flex; gap:7px; }
+    .download { display:none; border:1px solid var(--line); border-radius:8px; padding:6px 10px; color:#dce7fa; font-size:.75rem; font-weight:750; text-decoration:none; background:#18243a; }
+    #viewer { position:relative; height:calc(100% - 38px); min-height:340px; overflow:hidden; border:1px solid var(--line); border-radius:14px; background:radial-gradient(circle at 50% 36%,#1d2d47,#080d17 72%); }
+    #viewer canvas { display:block; width:100%; height:100%; }
+    #empty { position:absolute; inset:0; display:grid; place-items:center; text-align:center; padding:32px; color:#8290a8; line-height:1.7; pointer-events:none; }
+    .composer { margin:0 16px 16px; border:1px solid #334360; border-radius:14px; padding:12px; background:#111a2b; box-shadow:0 15px 50px #0007; }
+    textarea { width:100%; min-height:72px; max-height:170px; resize:vertical; border:0; outline:0; padding:5px; background:transparent; color:#f1f5ff; line-height:1.45; }
+    .composer-row { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:8px; }
+    #status { min-width:0; color:var(--muted); font-size:.79rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    #build { background:var(--accent); border-color:transparent; color:#071020; padding:10px 16px; white-space:nowrap; }
+    #build:disabled { opacity:.55; cursor:wait; }
+    .examples { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 16px; }
+    .chip { padding:6px 8px; font-size:.72rem; color:#aebbd1; background:#131d2e; }
+    .code-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+    #code { min-height:340px; margin:0; padding:14px; overflow:auto; border:1px solid var(--line); border-radius:10px; background:#070c14; color:#cfe0ff; font: .78rem/1.55 ui-monospace,SFMono-Regular,Consolas,monospace; white-space:pre; }
+    .safe-note { color:var(--muted); font-size:.76rem; line-height:1.5; margin-top:12px; }
+    .error { color:#ff9cac !important; }
+    @media (max-width:1050px) { body{overflow:auto}.workspace{height:auto;grid-template-columns:210px 1fr}.inspector{grid-column:1/-1;border-left:0;border-top:1px solid var(--line)}.stage{min-height:720px} }
+    @media (max-width:700px) { .badge{display:none}.workspace{display:block}.sidebar{border-right:0;border-bottom:1px solid var(--line)}.stage{min-height:700px}.viewer-wrap{height:500px}.inspector{border-top:1px solid var(--line)} }
   </style>
   <script type="importmap">
     {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"}}
   </script>
 </head>
 <body>
-  <main>
-    <header>
-      <div><h1>CadQuery Agent</h1><p>Describe a part. Generate editable CAD, inspect it in 3D, then download STEP or STL.</p></div>
-      <span class="pill" id="model">Loading local model…</span>
-    </header>
-    <form id="form" class="layout">
-      <section class="card">
-        <label for="prompt">What should I build?</label>
-        <textarea id="prompt" placeholder="A 30 mm cube with a centered 10 mm through-hole from top to bottom" required></textarea>
-        <p class="hint">Use millimeters. Include dimensions, hole direction, fillets, symmetry, and manufacturing details.</p>
-        <button id="generate" type="submit">Generate 3D model</button>
-        <div id="message" class="message" aria-live="polite">Ready. Your prompt stays on this machine.</div>
-      </section>
-      <section class="card">
-        <div class="toolbar">
-          <strong>3D preview</strong>
-          <div class="downloads"><a id="step" class="download">STEP</a><a id="stl" class="download">STL</a></div>
-        </div>
-        <div id="viewer"><div id="empty">Your generated model will appear here.<br>Drag to rotate · scroll to zoom</div></div>
-      </section>
-    </form>
-    <details class="card"><summary>Editable CadQuery Python</summary><pre id="code">Generate a model to see its source.</pre></details>
+  <header class="topbar">
+    <div class="brand"><div class="mark">CQ</div><div><h1>CadQuery Studio</h1><div class="subtitle">Prompt-driven parametric CAD</div></div></div>
+    <div class="top-actions"><span class="badge" id="model">Local model</span><button id="new-project">＋ New project</button></div>
+  </header>
+  <main class="workspace">
+    <aside class="sidebar">
+      <div class="label">Project</div>
+      <input id="project-name" maxlength="80" value="Untitled design" aria-label="Project name">
+      <div class="label">Build history</div>
+      <div id="history" class="history"><div class="empty-history">Your verified build steps will appear here. Start with the main body, then add one feature at a time.</div></div>
+    </aside>
+    <section class="stage">
+      <div class="viewer-wrap">
+        <div class="viewer-head"><strong id="revision-title">No model yet</strong><div class="downloads"><a id="step" class="download">STEP</a><a id="stl" class="download">STL</a></div></div>
+        <div id="viewer"><div id="empty"><div><strong>Build complex objects one step at a time</strong><br>Start with a base shape, then add holes, supports, fillets, and details.<br>Drag to rotate · scroll to zoom</div></div></div>
+      </div>
+      <form id="composer" class="composer">
+        <textarea id="prompt" required placeholder="First step: Create a 100 × 60 × 8 mm mounting plate…"></textarea>
+        <div class="composer-row"><div id="status">Ready · prompts and designs stay on this machine</div><button id="build" type="submit">Build first part</button></div>
+      </form>
+    </section>
+    <aside class="inspector">
+      <div class="code-head"><div class="label">Editable CadQuery Python</div><button id="copy">Copy</button></div>
+      <div class="examples">
+        <button class="chip" data-prompt="Add four 6 mm mounting holes, each 10 mm from the nearest corner">+ mounting holes</button>
+        <button class="chip" data-prompt="Add 3 mm fillets to the outside vertical edges">+ edge fillets</button>
+        <button class="chip" data-prompt="Add a centered cylindrical boss on the top face, 24 mm diameter and 12 mm tall">+ top boss</button>
+      </div>
+      <pre id="code">The complete parametric script for the selected revision will appear here.</pre>
+      <p class="safe-note">Each step is validated and built in an isolated, no-network worker before it is saved. Select an older revision to inspect it or branch from it.</p>
+    </aside>
   </main>
   <script type="module">
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 
-    const viewer = document.querySelector('#viewer');
-    const empty = document.querySelector('#empty');
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    viewer.prepend(renderer.domElement);
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    scene.add(new THREE.HemisphereLight(0xdde9ff, 0x25324a, 2.3));
-    const key = new THREE.DirectionalLight(0xffffff, 3.5); key.position.set(2, 3, 4); scene.add(key);
-    const fill = new THREE.DirectionalLight(0x8cacff, 2); fill.position.set(-3, -1, 2); scene.add(fill);
-    scene.add(new THREE.GridHelper(200, 20, 0x405274, 0x202b42));
-    let mesh;
-
-    function resize() {
-      const width = viewer.clientWidth, height = viewer.clientHeight;
-      renderer.setSize(width, height, false); camera.aspect = width / height; camera.updateProjectionMatrix();
-    }
+    const viewer=document.querySelector('#viewer'), empty=document.querySelector('#empty');
+    const scene=new THREE.Scene(), camera=new THREE.PerspectiveCamera(42,1,.1,100000);
+    const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio,2)); renderer.outputColorSpace=THREE.SRGBColorSpace; viewer.prepend(renderer.domElement);
+    const controls=new OrbitControls(camera,renderer.domElement); controls.enableDamping=true;
+    scene.add(new THREE.HemisphereLight(0xdde9ff,0x263650,2.4));
+    const key=new THREE.DirectionalLight(0xffffff,3.5); key.position.set(3,4,5); scene.add(key);
+    const fill=new THREE.DirectionalLight(0x82a7ff,2); fill.position.set(-3,-1,2); scene.add(fill);
+    scene.add(new THREE.GridHelper(300,30,0x465c80,0x202b42));
+    let mesh=null, project=null, selectedRevision=null;
+    function resize(){const w=viewer.clientWidth,h=viewer.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}
     new ResizeObserver(resize).observe(viewer); resize();
-    function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); } animate();
-
-    function showModel(url) {
-      new STLLoader().load(url, function (geometry) {
-        if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); }
-        geometry.computeVertexNormals(); geometry.center();
-        mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0x7ea2ff, metalness: .18, roughness: .38 }));
-        mesh.rotation.x = -Math.PI / 2; scene.add(mesh); empty.style.display = 'none';
-        const box = new THREE.Box3().setFromObject(mesh); const size = box.getSize(new THREE.Vector3());
-        const radius = Math.max(size.x, size.y, size.z, 1);
-        camera.near = radius / 1000; camera.far = radius * 100; camera.position.set(radius * 1.7, radius * 1.3, radius * 1.7);
-        controls.target.set(0, 0, 0); controls.update(); camera.updateProjectionMatrix();
-      }, undefined, function () { setMessage('The CAD files were made, but the preview could not be loaded.', true); });
+    function animate(){requestAnimationFrame(animate);controls.update();renderer.render(scene,camera)} animate();
+    function showModel(url){
+      new STLLoader().load(url,geometry=>{
+        if(mesh){scene.remove(mesh);mesh.geometry.dispose();mesh.material.dispose()}
+        geometry.computeVertexNormals();geometry.center();
+        mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:0x7fa3ff,metalness:.18,roughness:.36}));
+        mesh.rotation.x=-Math.PI/2;scene.add(mesh);empty.style.display='none';
+        const size=new THREE.Box3().setFromObject(mesh).getSize(new THREE.Vector3()),r=Math.max(size.x,size.y,size.z,1);
+        camera.near=r/1000;camera.far=r*100;camera.position.set(r*1.65,r*1.25,r*1.65);controls.target.set(0,0,0);controls.update();camera.updateProjectionMatrix();
+      },undefined,()=>setStatus('Preview failed to load, but the saved revision is still available.',true));
     }
-
-    const form = document.querySelector('#form');
-    const prompt = document.querySelector('#prompt');
-    const button = document.querySelector('#generate');
-    const message = document.querySelector('#message');
-    const code = document.querySelector('#code');
-    const step = document.querySelector('#step');
-    const stl = document.querySelector('#stl');
-    function setMessage(text, error=false) { message.textContent = text; message.className = error ? 'message error' : 'message'; }
-    fetch('/config').then(r => r.json()).then(data => { document.querySelector('#model').textContent = 'Local · ' + data.model; }).catch(() => { document.querySelector('#model').textContent = 'Local model'; });
-
-    form.addEventListener('submit', async function (event) {
-      event.preventDefault();
-      const text = prompt.value.trim();
-      if (!text) { setMessage('Describe the part you want to build.', true); return; }
-      button.disabled = true; setMessage('Generating and building locally… this can take a few minutes on CPU.');
-      try {
-        const response = await fetch('/models/generate', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({prompt:text}) });
-        const data = await response.json(); if (!response.ok) throw new Error(data.detail || 'Generation failed');
-        code.textContent = data.code; step.href = data.step_url; stl.href = data.stl_url; step.style.display = stl.style.display = 'inline-block';
-        showModel(data.stl_url + '?v=' + encodeURIComponent(data.run_id));
-        setMessage('Done · validated and rendered with ' + data.model + ' in ' + data.attempts + ' attempt(s).');
-      } catch (error) { setMessage(error.message, true); }
-      finally { button.disabled = false; }
+    const history=document.querySelector('#history'), code=document.querySelector('#code'), status=document.querySelector('#status');
+    const prompt=document.querySelector('#prompt'), build=document.querySelector('#build'), nameInput=document.querySelector('#project-name');
+    const step=document.querySelector('#step'),stl=document.querySelector('#stl'),title=document.querySelector('#revision-title');
+    function setStatus(text,isError=false){status.textContent=text;status.className=isError?'error':''}
+    function renderHistory(){
+      history.innerHTML='';
+      if(!project||!project.revisions.length){history.innerHTML='<div class="empty-history">Your verified build steps will appear here. Start with the main body, then add one feature at a time.</div>';return}
+      project.revisions.forEach(revision=>{
+        const button=document.createElement('button');button.className='revision'+(selectedRevision?.number===revision.number?' active':'');
+        button.innerHTML='<strong>v'+revision.number+'</strong><span></span>';button.querySelector('span').textContent=revision.instruction;
+        button.addEventListener('click',()=>selectRevision(revision));history.appendChild(button);
+      });
+    }
+    function selectRevision(revision){
+      selectedRevision=revision;renderHistory();code.textContent=revision.code;title.textContent='Revision '+revision.number+' · '+revision.instruction;
+      step.href=revision.step_url;stl.href=revision.stl_url;step.style.display=stl.style.display='inline-block';
+      showModel(revision.stl_url+'?v='+encodeURIComponent(revision.run_id));
+      build.textContent='Build next step';setStatus('Building from revision '+revision.number+' · select another revision to branch from it');
+    }
+    async function createProject(){
+      const response=await fetch('/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:nameInput.value.trim()||'Untitled design'})});
+      if(!response.ok)throw new Error('Could not create the project');project=await response.json();localStorage.setItem('cadquery-project-id',project.project_id);selectedRevision=null;renderHistory();return project;
+    }
+    async function loadProject(){
+      const id=localStorage.getItem('cadquery-project-id');if(!id)return;
+      const response=await fetch('/projects/'+encodeURIComponent(id));if(!response.ok){localStorage.removeItem('cadquery-project-id');return}
+      project=await response.json();nameInput.value=project.name;if(project.revisions.length)selectRevision(project.revisions.at(-1));else renderHistory();
+    }
+    document.querySelector('#composer').addEventListener('submit',async event=>{
+      event.preventDefault();const instruction=prompt.value.trim();if(!instruction)return;
+      build.disabled=true;setStatus('Thinking, validating, and building locally…');
+      try{
+        if(!project)await createProject();
+        const response=await fetch('/projects/'+encodeURIComponent(project.project_id)+'/steps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instruction,base_revision:selectedRevision?.number??null})});
+        const data=await response.json();if(!response.ok)throw new Error(data.detail||'Build step failed');
+        project=data;nameInput.value=project.name;prompt.value='';selectRevision(project.revisions.at(-1));setStatus('Step '+selectedRevision.number+' verified and saved · continue with the next feature');
+      }catch(error){setStatus(error.message,true)}finally{build.disabled=false}
     });
+    document.querySelector('#new-project').addEventListener('click',()=>{project=null;selectedRevision=null;localStorage.removeItem('cadquery-project-id');nameInput.value='Untitled design';history.innerHTML='';renderHistory();code.textContent='The complete parametric script for the selected revision will appear here.';title.textContent='No model yet';step.style.display=stl.style.display='none';if(mesh){scene.remove(mesh);mesh=null}empty.style.display='grid';build.textContent='Build first part';setStatus('New project ready · describe the base shape')});
+    document.querySelectorAll('.chip').forEach(chip=>chip.addEventListener('click',()=>{prompt.value=chip.dataset.prompt;prompt.focus()}));
+    document.querySelector('#copy').addEventListener('click',async()=>{await navigator.clipboard.writeText(code.textContent);setStatus('CadQuery source copied')});
+    fetch('/config').then(r=>r.json()).then(data=>document.querySelector('#model').textContent='Local · '+data.model);
+    loadProject().catch(()=>setStatus('Could not restore the previous project',true));
   </script>
 </body>
 </html>

@@ -44,5 +44,5 @@ if ! curl --fail --silent http://127.0.0.1:11434/api/version >/dev/null; then
 fi
 curl --fail --silent http://127.0.0.1:11434/api/version >/dev/null
 
-echo "CadQuery Agent is ready at http://127.0.0.1:8000"
+echo "CadQuery Studio is ready at http://127.0.0.1:8000"
 .venv/bin/uvicorn cadquery_agent.api:app --host 127.0.0.1 --port 8000

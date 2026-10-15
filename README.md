@@ -1,4 +1,4 @@
-# CadQuery Agent
+# CadQuery Studio
 
 A local harness that turns a text description, a reference image, or both into
 editable CadQuery Python, STL, and STEP. It calls a model server on loopback
@@ -22,6 +22,9 @@ flowchart LR
 - Runs generated code only in a no-network, read-only, resource-limited Docker
   or rootless Podman container.
 - Shows an interactive Three.js preview and provides STL and STEP downloads.
+- Keeps local projects with immutable revision history for prompt-by-prompt builds.
+- Lets any older revision become the base for a new branch.
+- Repairs some CadQuery runtime failures automatically before saving a step.
 
 ## Recommended models for this machine
 
@@ -96,8 +99,22 @@ Ollama server, and opens the API on loopback:
 ./scripts/start.sh
 ~~~
 
-Open http://127.0.0.1:8000, describe a part, and select **Generate 3D model**.
+Open http://127.0.0.1:8000, describe the base part, and select **Build first part**.
 Rotate and zoom the result, inspect its editable Python, or download STEP/STL.
+
+### Build a complex object step by step
+
+Start with the largest base feature, then use one prompt per mechanical change:
+
+1. Create a 100 × 60 × 8 mm mounting plate.
+2. Add four 6 mm holes, each 10 mm from the nearest corner.
+3. Add a centered 24 mm diameter boss, 12 mm tall.
+4. Cut an 8 mm through-hole through the boss and plate.
+5. Add 3 mm fillets to the outside vertical edges.
+
+Every successful prompt becomes a selectable revision. Selecting an older
+revision before the next prompt creates a new branch from that geometry. A
+failed generation or render leaves the last working revision unchanged.
 
 ## Command-line code generation
 

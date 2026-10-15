@@ -39,3 +39,16 @@ def test_retries_source_that_fails_static_checks() -> None:
 def test_requires_an_input() -> None:
     with pytest.raises(ValueError, match="provide"):
         asyncio.run(CadQueryAgent(FakeBackend([]), model="qwen2.5vl:3b").generate())
+
+
+def test_revision_prompt_contains_existing_source_and_requested_change() -> None:
+    backend = FakeBackend(["import cadquery as cq\nresult = cq.Workplane('XY').box(2, 2, 2)"])
+    asyncio.run(
+        CadQueryAgent(backend, model="qwen2.5-coder:1.5b").generate(
+            prompt="make it twice as large",
+            existing_source="import cadquery as cq\nresult = cq.Workplane('XY').box(1, 1, 1)",
+        )
+    )
+    assert "Existing validated script" in backend.prompts[0]
+    assert "box(1, 1, 1)" in backend.prompts[0]
+    assert "make it twice as large" in backend.prompts[0]

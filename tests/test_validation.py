@@ -51,3 +51,13 @@ result.show()"""
     result = validate_cadquery_source(source)
     assert not result.is_valid
     assert "method call is not allowed: show" in result.errors
+
+
+def test_rejects_nonexistent_top_level_primitive_constructors() -> None:
+    source = """import cadquery as cq
+base = cq.Workplane('XY').box(20, 20, 4)
+boss = cq.Cylinder(diameter=10, height=5)
+result = base.union(boss)"""
+    result = validate_cadquery_source(source)
+    assert not result.is_valid
+    assert "unsupported constructor: cq.Cylinder; use cq.Workplane methods" in result.errors

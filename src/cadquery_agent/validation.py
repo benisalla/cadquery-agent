@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 _BLOCKED_CALLS = {"compile", "eval", "exec", "input", "open", "__import__"}
 _BLOCKED_METHODS = {"export", "show", "show_object"}
+_UNSUPPORTED_CQ_CONSTRUCTORS = {"Box", "Cylinder", "Sphere"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +51,14 @@ def validate_cadquery_source(source: str) -> ValidationResult:
         elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
             if node.func.attr in _BLOCKED_METHODS:
                 errors.append(f"method call is not allowed: {node.func.attr}")
+            if (
+                isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "cq"
+                and node.func.attr in _UNSUPPORTED_CQ_CONSTRUCTORS
+            ):
+                errors.append(
+                    f"unsupported constructor: cq.{node.func.attr}; use cq.Workplane methods"
+                )
         elif isinstance(node, ast.Attribute) and node.attr.startswith("__"):
             errors.append(f"dunder attribute is not allowed: {node.attr}")
 

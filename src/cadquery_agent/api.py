@@ -8,6 +8,13 @@ from starlette.responses import FileResponse, HTMLResponse
 from cadquery_agent.agent import CadQueryAgent, GenerationError
 from cadquery_agent.backend import ModelServerError, OpenAICompatibleBackend
 from cadquery_agent.images import validate_image_bytes
+from cadquery_agent.projects import (
+    CadProject,
+    ProjectNotFoundError,
+    ProjectStore,
+    ProjectWorkflow,
+    RevisionNotFoundError,
+)
 from cadquery_agent.rendering import DockerCadRenderer, RenderError, artifact_path
 from cadquery_agent.settings import Settings, get_settings
 
@@ -37,6 +44,34 @@ class ConfigResponse(BaseModel):
     server: str
 
 
+class CreateProjectRequest(BaseModel):
+    name: str = Field(default="Untitled design", min_length=1, max_length=80)
+
+
+class ProjectStepRequest(BaseModel):
+    instruction: str = Field(min_length=1, max_length=8_000)
+    base_revision: int | None = Field(default=None, ge=1)
+
+
+class RevisionResponse(BaseModel):
+    number: int
+    instruction: str
+    code: str
+    model: str
+    attempts: int
+    run_id: str
+    created_at: str
+    stl_url: str
+    step_url: str
+
+
+class ProjectResponse(BaseModel):
+    project_id: str
+    name: str
+    created_at: str
+    revisions: list[RevisionResponse]
+
+
 def get_agent(settings: Annotated[Settings, Depends(get_settings)]) -> CadQueryAgent:
     return CadQueryAgent(
         backend=OpenAICompatibleBackend(settings),
@@ -49,7 +84,44 @@ def get_renderer(settings: Annotated[Settings, Depends(get_settings)]) -> Docker
     return DockerCadRenderer(settings)
 
 
-app = FastAPI(title="CADQuery Agent", version="0.1.0")
+_PROJECT_STORE = ProjectStore()
+
+
+def get_project_store() -> ProjectStore:
+    return _PROJECT_STORE
+
+
+def get_project_workflow(
+    store: Annotated[ProjectStore, Depends(get_project_store)],
+    agent: Annotated[CadQueryAgent, Depends(get_agent)],
+    renderer: Annotated[DockerCadRenderer, Depends(get_renderer)],
+) -> ProjectWorkflow:
+    return ProjectWorkflow(store=store, agent=agent, renderer=renderer)
+
+
+def project_response(project: CadProject) -> ProjectResponse:
+    return ProjectResponse(
+        project_id=project.project_id,
+        name=project.name,
+        created_at=project.created_at,
+        revisions=[
+            RevisionResponse(
+                number=revision.number,
+                instruction=revision.instruction,
+                code=revision.code,
+                model=revision.model,
+                attempts=revision.attempts,
+                run_id=revision.run_id,
+                created_at=revision.created_at,
+                stl_url=f"/artifacts/{revision.run_id}/model.stl",
+                step_url=f"/artifacts/{revision.run_id}/model.step",
+            )
+            for revision in project.revisions
+        ],
+    )
+
+
+app = FastAPI(title="CadQuery Studio", version="0.2.0")
 _INDEX_HTML = Path(__file__).with_name("web") / "index.html"
 
 
@@ -66,6 +138,47 @@ async def health() -> HealthResponse:
 @app.get("/config", response_model=ConfigResponse)
 async def config(settings: Annotated[Settings, Depends(get_settings)]) -> ConfigResponse:
     return ConfigResponse(model=settings.model, server=settings.base_url)
+
+
+@app.post("/projects", response_model=ProjectResponse, status_code=201)
+async def create_project(
+    request: CreateProjectRequest,
+    store: Annotated[ProjectStore, Depends(get_project_store)],
+) -> ProjectResponse:
+    return project_response(store.create(request.name))
+
+
+@app.get("/projects/{project_id}", response_model=ProjectResponse)
+async def get_project(
+    project_id: str,
+    store: Annotated[ProjectStore, Depends(get_project_store)],
+) -> ProjectResponse:
+    try:
+        project = store.get(project_id)
+    except ProjectNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return project_response(project)
+
+
+@app.post("/projects/{project_id}/steps", response_model=ProjectResponse)
+async def add_project_step(
+    project_id: str,
+    request: ProjectStepRequest,
+    workflow: Annotated[ProjectWorkflow, Depends(get_project_workflow)],
+) -> ProjectResponse:
+    try:
+        project, _ = await workflow.add_step(
+            project_id=project_id,
+            instruction=request.instruction,
+            base_revision=request.base_revision,
+        )
+    except (ProjectNotFoundError, RevisionNotFoundError) as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except (ModelServerError, GenerationError) as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    except RenderError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    return project_response(project)
 
 
 @app.post("/generate", response_model=GenerationResponse)

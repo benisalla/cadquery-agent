@@ -1,12 +1,25 @@
 from fastapi.testclient import TestClient
 
 from cadquery_agent.agent import GenerationResult
-from cadquery_agent.api import app, get_agent, get_renderer
+from cadquery_agent.api import (
+    app,
+    get_agent,
+    get_project_store,
+    get_project_workflow,
+    get_renderer,
+)
+from cadquery_agent.projects import ProjectStore, ProjectWorkflow
 from cadquery_agent.rendering import RenderResult
 
 
 class FakeAgent:
-    async def generate(self, prompt: str = "", image=None) -> GenerationResult:
+    async def generate(
+        self,
+        prompt: str = "",
+        image=None,
+        existing_source: str | None = None,
+    ) -> GenerationResult:
+        del image, existing_source
         return GenerationResult(
             code="import cadquery as cq\nresult = cq.Workplane('XY').box(1, 2, 3)",
             attempts=1,
@@ -35,8 +48,8 @@ def test_interface_is_available() -> None:
     with TestClient(app) as client:
         response = client.get("/")
     assert response.status_code == 200
-    assert "CadQuery Agent" in response.text
-    assert "Generate 3D model" in response.text
+    assert "CadQuery Studio" in response.text
+    assert "Build next step" in response.text
     assert "STLLoader" in response.text
 
 
@@ -64,3 +77,25 @@ def test_generate_model_returns_preview_and_download_urls() -> None:
     body = response.json()
     assert body["stl_url"].endswith("/model.stl")
     assert body["step_url"].endswith("/model.step")
+
+
+def test_project_api_creates_and_appends_a_build_step(tmp_path) -> None:
+    store = ProjectStore(tmp_path / "projects")
+    workflow = ProjectWorkflow(store, FakeAgent(), FakeRenderer())
+    app.dependency_overrides[get_project_store] = lambda: store
+    app.dependency_overrides[get_project_workflow] = lambda: workflow
+    try:
+        with TestClient(app) as client:
+            created = client.post("/projects", json={"name": "Robot arm"})
+            project_id = created.json()["project_id"]
+            stepped = client.post(
+                f"/projects/{project_id}/steps",
+                json={"instruction": "Create the mounting base"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+    assert created.status_code == 201
+    assert stepped.status_code == 200
+    assert stepped.json()["name"] == "Robot arm"
+    assert stepped.json()["revisions"][0]["instruction"] == "Create the mounting base"
+    assert stepped.json()["revisions"][0]["stl_url"].endswith("model.stl")
