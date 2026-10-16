@@ -85,6 +85,7 @@ Measured with `cadquery-agent bench` (5 CAD tasks checked by size and volume, 3 
 | Code | **qwen2.5-coder:3b** (default) | 1.9 GB | 4/5 | 89 s | best balance |
 | Code | qwen3.5:4b | 3.3 GB | 4/5 | 221 s | thinking turned off by its profile |
 | Code | qwen2.5-coder:1.5b | 1.0 GB | 3/5 | 33 s | fastest, misreads more |
+| Code | qwen3:4b-instruct-2507-q4_K_M | 2.5 GB | 3/5 (twice) | 92–166 s | answers directly (no thinking); always misses the cylinder hole and L-bracket wall |
 | Drawing | **qwen3.5:4b** (default) | 3.3 GB | read 80 × 50 × 5 mm + Ø20 hole | 23 s | also writes code |
 | Drawing | qwen2.5vl:3b | 3.2 GB | read 80 × 50 × 5 mm + Ø20 hole | 95 s | |
 | Voice | **base.en** (default) | 145 MB | exact transcript | 1 s | Whisper via faster-whisper |
@@ -92,8 +93,8 @@ Measured with `cadquery-agent bench` (5 CAD tasks checked by size and volume, 3 
 | Voice | small.en | 480 MB | exact transcript | 13 s | |
 
 \* includes the one-time model load. Results vary between runs; benchmark on your own machine.
-Researched but not tested here (disk space): `qwen3:4b-instruct-2507`, `qwen3-vl:4b-instruct`,
-`gemma3:4b`. Pull one and it appears in the picker.
+Researched but not tested here (disk space): `qwen3-vl:4b-instruct` (3.3 GB) and `gemma3:4b`
+(3.4 GB). Both are 4-bit builds that fit a 16 GB CPU-only machine. Pull one and it appears in the picker.
 
 ### Cloud models (optional, not local)
 
