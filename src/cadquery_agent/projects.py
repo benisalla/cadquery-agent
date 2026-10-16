@@ -1,13 +1,13 @@
 import asyncio
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from cadquery_agent.agent import CadQueryAgent, GenerationResult
-from cadquery_agent.rendering import DockerCadRenderer, RenderError, RenderResult
-from cadquery_agent.validation import validate_cadquery_source
+from cadquery_agent.agent import CadQueryAgent, Events, check_script
+from cadquery_agent.images import ImageInput
+from cadquery_agent.rendering import DockerCadRenderer
 
 
 class ProjectNotFoundError(LookupError):
@@ -19,7 +19,7 @@ class RevisionNotFoundError(LookupError):
 
 
 class SourceValidationError(ValueError):
-    """Manually edited source failed the deterministic safety checks."""
+    """Manually edited source failed the static, runtime or geometry checks."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +31,8 @@ class ProjectRevision:
     attempts: int
     run_id: str
     created_at: str
+    size: list[float] = field(default_factory=list)
+    trace: list[list[str]] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,36 +112,46 @@ class ProjectWorkflow:
         store: ProjectStore,
         agent: CadQueryAgent,
         renderer: DockerCadRenderer,
-        runtime_retries: int = 2,
     ) -> None:
         self.store = store
         self.agent = agent
         self.renderer = renderer
-        self.runtime_retries = runtime_retries
 
     async def add_step(
         self,
         project_id: str,
         instruction: str,
         base_revision: int | None = None,
+        image: ImageInput | None = None,
+        model: str | None = None,
+        vision_model: str | None = None,
+        on_event: Events | None = None,
     ) -> tuple[CadProject, ProjectRevision]:
-        lock = self.store.lock_for(project_id)
-        async with lock:
+        async with self.store.lock_for(project_id):
             project = self.store.get(project_id)
-            existing_source = self._base_source(project, base_revision)
             generated = await self.agent.generate(
                 prompt=instruction,
-                existing_source=existing_source,
+                image=image,
+                existing_source=self._base_source(project, base_revision),
+                model=model,
+                vision_model=vision_model,
+                on_event=on_event,
             )
-            rendered, generated = await self._render_with_repairs(generated, instruction)
+            if generated.render is None:
+                raise RuntimeError("the project agent must be built with a renderer")
+            title = instruction.strip()
+            if not title and generated.sketch_description:
+                title = "Sketch: " + " ".join(generated.sketch_description.split())[:80]
             revision = ProjectRevision(
                 number=len(project.revisions) + 1,
-                instruction=instruction.strip(),
+                instruction=title,
                 code=generated.code,
                 model=generated.model,
                 attempts=generated.attempts,
-                run_id=rendered.run_id,
+                run_id=generated.render.run_id,
                 created_at=datetime.now(UTC).isoformat(),
+                size=generated.render.stats.get("size", []),
+                trace=[list(attempt.problems) for attempt in generated.trace],
             )
             return self.store.append(project_id, revision), revision
 
@@ -148,31 +160,31 @@ class ProjectWorkflow:
         project_id: str,
         source: str,
         base_revision: int | None = None,
+        label: str | None = None,
     ) -> tuple[CadProject, ProjectRevision]:
         normalized_source = source.strip()
-        validation = validate_cadquery_source(normalized_source)
-        if not validation.is_valid:
-            raise SourceValidationError("; ".join(validation.errors))
-
-        lock = self.store.lock_for(project_id)
-        async with lock:
+        async with self.store.lock_for(project_id):
             project = self.store.get(project_id)
             base_source = self._base_source(project, base_revision)
             if base_source is not None and base_source.strip() == normalized_source:
                 raise SourceValidationError("make a code change before running it")
-            rendered = await self.renderer.render(normalized_source)
+            problems, rendered = await check_script(normalized_source, self.renderer)
+            if problems or rendered is None:
+                raise SourceValidationError("; ".join(problems))
             selected_number = base_revision
             if selected_number is None and project.revisions:
                 selected_number = project.revisions[-1].number
             origin = f"v{selected_number}" if selected_number is not None else "new design"
             revision = ProjectRevision(
                 number=len(project.revisions) + 1,
-                instruction=f"Manual code edit from {origin}",
+                instruction=label or f"Manual code edit from {origin}",
                 code=normalized_source,
                 model="manual",
                 attempts=1,
                 run_id=rendered.run_id,
                 created_at=datetime.now(UTC).isoformat(),
+                size=rendered.stats.get("size", []),
+                trace=[[]],
             )
             return self.store.append(project_id, revision), revision
 
@@ -186,30 +198,3 @@ class ProjectWorkflow:
             if revision.number == selected:
                 return revision.code
         raise RevisionNotFoundError("base revision does not exist")
-
-    async def _render_with_repairs(
-        self,
-        generated: GenerationResult,
-        instruction: str,
-    ) -> tuple[RenderResult, GenerationResult]:
-        total_attempts = generated.attempts
-        for attempt in range(self.runtime_retries + 1):
-            try:
-                rendered = await self.renderer.render(generated.code)
-                if total_attempts != generated.attempts:
-                    generated = GenerationResult(
-                        code=generated.code,
-                        attempts=total_attempts,
-                        model=generated.model,
-                    )
-                return rendered, generated
-            except RenderError as error:
-                if attempt == self.runtime_retries:
-                    raise
-                generated = await self.agent.repair_runtime_failure(
-                    source=generated.code,
-                    error=str(error),
-                    instruction=instruction,
-                )
-                total_attempts += generated.attempts
-        raise AssertionError("unreachable")

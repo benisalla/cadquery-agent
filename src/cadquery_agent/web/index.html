@@ -4,197 +4,208 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CadQuery Studio</title>
-  <style>
-    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; --panel:#101827; --line:#26334c; --muted:#8e9bb2; --accent:#8babff; }
-    * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; overflow: hidden; background: #080c15; color: #eef3ff; }
-    button, input, textarea { font: inherit; }
-    button { cursor: pointer; }
-    .topbar { height: 68px; padding: 0 22px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); background: #0c121f; }
-    .brand { display: flex; align-items: center; gap: 13px; }
-    .mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: linear-gradient(135deg,#9cb7ff,#597de5); color:#09101e; font-weight:900; }
-    h1 { margin: 0; font-size: 1rem; letter-spacing: -.01em; }
-    .subtitle { color: var(--muted); font-size: .77rem; margin-top: 2px; }
-    .top-actions { display: flex; align-items: center; gap: 10px; }
-    .badge { border: 1px solid var(--line); border-radius: 999px; padding: 7px 11px; color: #b8c5dd; font-size: .78rem; }
-    button { border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; background: #1a2539; color: #edf3ff; font-weight: 700; }
-    button:hover { border-color: #53698f; }
-    .workspace { height: calc(100vh - 68px); display: grid; grid-template-columns: 240px minmax(420px,1fr) minmax(420px,32vw); }
-    .sidebar, .inspector { min-width: 0; padding: 16px; background: #0c121f; overflow: auto; }
-    .sidebar { border-right: 1px solid var(--line); }
-    .inspector { border-left: 1px solid var(--line); }
-    .label { color: var(--muted); font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-    #project-name { width: 100%; margin: 9px 0 18px; border: 1px solid var(--line); border-radius: 9px; padding: 10px; background:#080e19; color:#eef3ff; font-weight:700; }
-    .history { display: grid; gap: 8px; margin-top: 10px; }
-    .revision { width: 100%; text-align: left; padding: 11px; background: #101827; }
-    .revision.active { border-color: var(--accent); background: #16233a; box-shadow: inset 3px 0 var(--accent); }
-    .revision strong { display: block; color: #dfe8fa; font-size: .83rem; }
-    .revision span { display: block; margin-top: 5px; color: var(--muted); font-size: .76rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .empty-history { color: var(--muted); line-height: 1.5; font-size: .84rem; padding: 15px 2px; }
-    .stage { min-width: 0; display: grid; grid-template-rows: 1fr auto; background: #090e18; }
-    .viewer-wrap { min-height: 0; padding: 16px; }
-    .viewer-head { height: 38px; display:flex; align-items:start; justify-content:space-between; gap:12px; }
-    #revision-title { font-size: .9rem; }
-    .downloads { display:flex; gap:7px; }
-    .download { display:none; border:1px solid var(--line); border-radius:8px; padding:6px 10px; color:#dce7fa; font-size:.75rem; font-weight:750; text-decoration:none; background:#18243a; }
-    #viewer { position:relative; height:calc(100% - 38px); min-height:340px; overflow:hidden; border:1px solid var(--line); border-radius:14px; background:radial-gradient(circle at 50% 36%,#1d2d47,#080d17 72%); }
-    #viewer canvas { display:block; width:100%; height:100%; }
-    #empty { position:absolute; inset:0; display:grid; place-items:center; text-align:center; padding:32px; color:#8290a8; line-height:1.7; pointer-events:none; }
-    .composer { margin:0 16px 16px; border:1px solid #334360; border-radius:14px; padding:12px; background:#111a2b; box-shadow:0 15px 50px #0007; }
-    textarea { width:100%; min-height:72px; max-height:170px; resize:vertical; border:0; outline:0; padding:5px; background:transparent; color:#f1f5ff; line-height:1.45; }
-    .composer-row { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:8px; }
-    #status { min-width:0; color:var(--muted); font-size:.79rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    #build { background:var(--accent); border-color:transparent; color:#071020; padding:10px 16px; white-space:nowrap; }
-    #build:disabled { opacity:.55; cursor:wait; }
-    .examples { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 16px; }
-    .chip { padding:6px 8px; font-size:.72rem; color:#aebbd1; background:#131d2e; }
-    .code-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
-    .code-actions { display:flex; gap:7px; }
-    .editor-shell { position:relative; display:grid; grid-template-columns:44px 1fr; height:calc(100vh - 255px); min-height:420px; overflow:hidden; border:1px solid var(--line); border-radius:10px; background:#070c14; }
-    #lines { margin:0; padding:14px 9px; overflow:hidden; border-right:1px solid #1b2639; color:#53627a; background:#090f19; text-align:right; user-select:none; font:.78rem/1.55 ui-monospace,SFMono-Regular,Consolas,monospace; }
-    #code { width:100%; height:100%; min-height:0; resize:none; margin:0; padding:14px; overflow:auto; border:0; border-radius:0; outline:0; background:#070c14; color:#cfe0ff; caret-color:#fff; tab-size:2; white-space:pre; font:.78rem/1.55 ui-monospace,SFMono-Regular,Consolas,monospace; }
-    #code:focus { box-shadow:inset 0 0 0 1px #5877b8; }
-    #run-code { background:#2c895f; border-color:#3aa574; }
-    #run-code:disabled, #reset-code:disabled { opacity:.5; cursor:not-allowed; }
-    #dirty { color:#f0bd64; font-size:.72rem; white-space:nowrap; }
-    .safe-note { color:var(--muted); font-size:.76rem; line-height:1.5; margin-top:12px; }
-    .error { color:#ff9cac !important; }
-    @media (max-width:1150px) { body{overflow:auto}.workspace{height:auto;grid-template-columns:210px 1fr}.inspector{grid-column:1/-1;border-left:0;border-top:1px solid var(--line)}.stage{min-height:720px}.editor-shell{height:560px} }
-    @media (max-width:700px) { .badge{display:none}.workspace{display:block}.sidebar{border-right:0;border-bottom:1px solid var(--line)}.stage{min-height:700px}.viewer-wrap{height:500px}.inspector{border-top:1px solid var(--line)} }
-  </style>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%238babff'/%3E%3C/svg%3E">
+  <!-- The import map must come before any module or modulepreload. -->
   <script type="importmap">
-    {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"}}
+    {"imports": {"three": "/static/vendor/three/build/three.module.js", "three/addons/": "/static/vendor/three/examples/jsm/"}}
   </script>
+  <link rel="modulepreload" href="/static/vendor/three/build/three.module.js">
+  <link rel="modulepreload" href="/static/vendor/three/build/three.core.js">
+  <link rel="modulepreload" href="/static/vendor/three/examples/jsm/controls/OrbitControls.js">
+  <link rel="modulepreload" href="/static/vendor/three/examples/jsm/controls/TransformControls.js">
+  <link rel="modulepreload" href="/static/vendor/three/examples/jsm/loaders/STLLoader.js">
+  <link rel="stylesheet" href="/static/styles.css">
 </head>
-<body>
+<body data-history="open" data-code="open">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 3"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 6-6 6 6 6M16 6l6 6-6 6"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></symbol>
+    <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="m14 6 4 4"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5v14l11-7z"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></symbol>
+    <symbol id="i-eraser" viewBox="0 0 24 24"><path d="m7 21-4-4L14 6l6 6-9 9H7zM21 21H11"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+    <symbol id="i-fit" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
+    <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></symbol>
+    <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 19h10a4.5 4.5 0 0 0 .6-9A6 6 0 0 0 6.1 9.6 4.7 4.7 0 0 0 7 19z"/></symbol>
+    <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M10 10h4v4h-4zM9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5v.01"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-loader" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="M12 2.5 3.5 7v10l8.5 4.5 8.5-4.5V7z"/><path d="m3.5 7 8.5 4.5L20.5 7M12 11.5v10"/></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4M5 4h12l-2.5 4L17 12H5"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M6.3 6.3l2.5 2.5M15.2 15.2l2.5 2.5M6.3 17.7l2.5-2.5M15.2 8.8l2.5-2.5"/></symbol>
+  </svg>
+
   <header class="topbar">
-    <div class="brand"><div class="mark">CQ</div><div><h1>CadQuery Studio</h1><div class="subtitle">Prompt-driven parametric CAD</div></div></div>
-    <div class="top-actions"><span class="badge" id="model">Local model</span><button id="new-project">＋ New project</button></div>
+    <div class="brand"><div class="mark">CQ</div><h1>CadQuery Studio</h1></div>
+    <button class="badge" id="model" title="Choose models" aria-label="Choose models"><svg class="icon small"><use href="#i-cpu"/></svg><span id="model-label">Local model</span></button>
+    <button id="toggle-history" class="ghost" aria-pressed="true" title="Show or hide build history" aria-label="Build history">
+      <svg class="icon"><use href="#i-history"/></svg><span class="hide-small">History</span>
+    </button>
+    <button id="toggle-code" class="ghost" aria-pressed="true" title="Show or hide code" aria-label="Code">
+      <svg class="icon"><use href="#i-code"/></svg><span class="hide-small">Code</span>
+    </button>
+    <button id="new-project" title="Start a new project" aria-label="New project"><svg class="icon"><use href="#i-plus"/></svg><span class="hide-small">New</span></button>
   </header>
+
   <main class="workspace">
-    <aside class="sidebar">
-      <div class="label">Project</div>
-      <input id="project-name" maxlength="80" value="Untitled design" aria-label="Project name">
-      <div class="label">Build history</div>
-      <div id="history" class="history"><div class="empty-history">Your verified build steps will appear here. Start with the main body, then add one feature at a time.</div></div>
-    </aside>
-    <section class="stage">
-      <div class="viewer-wrap">
-        <div class="viewer-head"><strong id="revision-title">No model yet</strong><div class="downloads"><a id="step" class="download">STEP</a><a id="stl" class="download">STL</a></div></div>
-        <div id="viewer"><div id="empty"><div><strong>Build complex objects one step at a time</strong><br>Start with a base shape, then add holes, supports, fillets, and details.<br>Drag to rotate · scroll to zoom</div></div></div>
+    <aside id="history-panel" class="panel drawer">
+      <div class="panel-head">
+        <span class="label">Project</span>
+        <button class="ghost icon-only" data-close="history" title="Close" aria-label="Close history"><svg class="icon"><use href="#i-close"/></svg></button>
       </div>
+      <div class="panel-body">
+        <input id="project-name" maxlength="80" value="Untitled design" aria-label="Project name">
+        <div class="label">Build history</div>
+        <div id="history" class="history"></div>
+      </div>
+    </aside>
+
+    <section class="stage">
+      <div class="viewer-head">
+        <div class="viewer-title"><strong id="revision-title">No model yet</strong><span id="size"></span></div>
+        <button id="arrange" class="ghost" aria-pressed="false" disabled title="Place, move and join copies of parts" aria-label="Arrange parts"><svg class="icon"><use href="#i-move"/></svg><span class="hide-small">Arrange</span></button>
+        <button id="fit" class="ghost" title="Fit model in view" aria-label="Fit model in view"><svg class="icon"><use href="#i-fit"/></svg><span class="hide-small">Fit</span></button>
+        <a id="step" class="download" title="Download STEP" hidden><svg class="icon small"><use href="#i-download"/></svg>STEP</a>
+        <a id="stl" class="download" title="Download STL" hidden><svg class="icon small"><use href="#i-download"/></svg>STL</a>
+      </div>
+      <div id="viewer">
+        <div id="busy-bar" class="busy-bar" hidden></div>
+        <div id="empty"><div><svg class="icon"><use href="#i-box"/></svg><br><strong>Build one step at a time</strong><br>Type, speak or draw a part below.<br>Drag to rotate · scroll to zoom</div></div>
+        <div id="viewer-loading" class="viewer-loading" hidden><svg class="icon small spin"><use href="#i-loader"/></svg>Loading model</div>
+        <div id="arrange-tray" class="tray" hidden>
+          <span class="label">Add part</span>
+          <div id="part-list" class="part-list"></div>
+          <div class="tray-row">
+            <button id="move-tool" type="button" aria-pressed="true" title="Move (G)"><svg class="icon"><use href="#i-move"/></svg>Move</button>
+            <button id="rotate-tool" type="button" aria-pressed="false" title="Rotate (R)"><svg class="icon"><use href="#i-rotate"/></svg>Rotate</button>
+          </div>
+          <div class="tray-row">
+            <button id="drop-part" type="button" disabled>Drop to floor</button>
+            <button id="remove-part" type="button" disabled title="Remove (Delete)"><svg class="icon"><use href="#i-trash"/></svg>Remove</button>
+          </div>
+          <button id="join-parts" class="primary" type="button" disabled>Join into model</button>
+          <p class="hint">Tap a part to select it · G move · R rotate · Del remove · Esc deselect</p>
+        </div>
+        <div id="progress" class="progress" role="status" aria-live="polite" hidden>
+          <div class="progress-head">
+            <strong id="progress-title">Building</strong>
+            <span id="progress-attempt"></span>
+            <button id="progress-close" class="ghost icon-only" type="button" title="Dismiss" aria-label="Dismiss" hidden><svg class="icon"><use href="#i-close"/></svg></button>
+          </div>
+          <ol id="progress-steps" class="steps"></ol>
+          <p id="progress-note" class="progress-note"></p>
+        </div>
+      </div>
+
       <form id="composer" class="composer">
-        <textarea id="prompt" required placeholder="First step: Create a 100 × 60 × 8 mm mounting plate…"></textarea>
-        <div class="composer-row"><div id="status">Ready · prompts and designs stay on this machine</div><button id="build" type="submit">Build first part</button></div>
+        <div class="chips">
+          <button class="chip" type="button" data-prompt="Add "><svg class="icon"><use href="#i-plus"/></svg>Add part</button>
+          <button class="chip" type="button" data-prompt="Change "><svg class="icon"><use href="#i-pen"/></svg>Change</button>
+          <button class="chip" type="button" data-prompt="Remove "><svg class="icon"><use href="#i-minus"/></svg>Remove part</button>
+          <button class="chip" type="button" data-prompt="Enhance "><svg class="icon"><use href="#i-spark"/></svg>Enhance</button>
+        </div>
+        <textarea id="prompt" aria-label="Describe the part" placeholder="Create a 100 × 60 × 8 mm mounting plate…"></textarea>
+        <div id="attachment" class="attachment" hidden>
+          <img id="attachment-thumb" alt="Attached image">
+          <div class="attachment-text">
+            <span id="attachment-name">Image</span>
+            <span class="attachment-hint"><svg class="icon small"><use href="#i-eye"/></svg><span id="attachment-hint">Will be read by the vision model</span></span>
+          </div>
+          <button id="remove-attachment" class="ghost icon-only" type="button" title="Remove image" aria-label="Remove image"><svg class="icon"><use href="#i-close"/></svg></button>
+        </div>
+        <div id="recording-bar" class="recording-bar" hidden>
+          <span class="rec-dot"></span><span class="hide-small">Recording</span>
+          <div id="level" class="meter" aria-hidden="true"></div>
+          <span id="rec-time">0:00</span>
+          <button id="cancel-recording" type="button" class="ghost" title="Discard recording" aria-label="Cancel recording"><svg class="icon"><use href="#i-close"/></svg><span class="hide-small">Cancel</span></button>
+          <button id="stop-recording" type="button" class="primary" title="Stop and transcribe"><svg class="icon"><use href="#i-stop"/></svg>Stop &amp; use</button>
+        </div>
+        <div class="composer-row">
+          <div class="tools" role="group" aria-label="Add input">
+            <button id="attach" type="button" title="Attach a photo or drawing (or paste / drop one)" aria-label="Attach image"><svg class="icon"><use href="#i-image"/></svg><span class="hide-small">Image</span></button>
+            <button id="open-sketch" type="button" title="Draw a sketch" aria-label="Draw a sketch"><svg class="icon"><use href="#i-pen"/></svg><span class="hide-small">Draw</span></button>
+            <button id="mic" type="button" title="Speak your prompt" aria-label="Voice input" hidden><svg class="icon"><use href="#i-mic"/></svg><span class="hide-small">Voice</span></button>
+          </div>
+          <input id="file" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+          <span class="spacer"></span>
+          <button id="build" class="primary" type="submit"><svg class="icon"><use href="#i-send"/></svg><span id="build-label">Build first part</span></button>
+        </div>
+        <div id="status" role="status">Ready · everything runs on this machine</div>
       </form>
     </section>
-    <aside class="inspector">
-      <div class="code-head"><div><div class="label">CadQuery Python</div><span id="dirty"></span></div><div class="code-actions"><button id="reset-code" disabled>Reset</button><button id="copy">Copy</button><button id="run-code" disabled>▶ Run code</button></div></div>
-      <div class="examples">
-        <button class="chip" data-prompt="Add ">＋ Add part</button>
-        <button class="chip" data-prompt="Change ">✎ Change</button>
-        <button class="chip" data-prompt="Remove ">− Remove part</button>
-        <button class="chip" data-prompt="Enhance ">✦ Enhance</button>
-      </div>
-      <div class="editor-shell"><pre id="lines">1</pre><textarea id="code" spellcheck="false" aria-label="Editable CadQuery Python"></textarea></div>
-      <p class="safe-note">Edit any dimension or construction step, then press <strong>Run code</strong> (Ctrl/⌘ + Enter). AI and manual runs are validated in an isolated, no-network worker and saved as new revisions.</p>
-    </aside>
-  </main>
-  <script type="module">
-    import * as THREE from 'three';
-    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-    import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 
-    const viewer=document.querySelector('#viewer'), empty=document.querySelector('#empty');
-    const scene=new THREE.Scene(), camera=new THREE.PerspectiveCamera(42,1,.1,100000);
-    const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio,2)); renderer.outputColorSpace=THREE.SRGBColorSpace; viewer.prepend(renderer.domElement);
-    const controls=new OrbitControls(camera,renderer.domElement); controls.enableDamping=true;
-    scene.add(new THREE.HemisphereLight(0xdde9ff,0x263650,2.4));
-    const key=new THREE.DirectionalLight(0xffffff,3.5); key.position.set(3,4,5); scene.add(key);
-    const fill=new THREE.DirectionalLight(0x82a7ff,2); fill.position.set(-3,-1,2); scene.add(fill);
-    scene.add(new THREE.GridHelper(300,30,0x465c80,0x202b42));
-    let mesh=null, project=null, selectedRevision=null;
-    function resize(){const w=viewer.clientWidth,h=viewer.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}
-    new ResizeObserver(resize).observe(viewer); resize();
-    function animate(){requestAnimationFrame(animate);controls.update();renderer.render(scene,camera)} animate();
-    function showModel(url){
-      new STLLoader().load(url,geometry=>{
-        if(mesh){scene.remove(mesh);mesh.geometry.dispose();mesh.material.dispose()}
-        geometry.computeVertexNormals();geometry.center();
-        mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:0x7fa3ff,metalness:.18,roughness:.36}));
-        mesh.rotation.x=-Math.PI/2;scene.add(mesh);empty.style.display='none';
-        const size=new THREE.Box3().setFromObject(mesh).getSize(new THREE.Vector3()),r=Math.max(size.x,size.y,size.z,1);
-        camera.near=r/1000;camera.far=r*100;camera.position.set(r*1.65,r*1.25,r*1.65);controls.target.set(0,0,0);controls.update();camera.updateProjectionMatrix();
-      },undefined,()=>setStatus('Preview failed to load, but the saved revision is still available.',true));
-    }
-    const history=document.querySelector('#history'), code=document.querySelector('#code'), lines=document.querySelector('#lines'), status=document.querySelector('#status');
-    const prompt=document.querySelector('#prompt'), build=document.querySelector('#build'), nameInput=document.querySelector('#project-name');
-    const step=document.querySelector('#step'),stl=document.querySelector('#stl'),title=document.querySelector('#revision-title');
-    const runCode=document.querySelector('#run-code'),resetCode=document.querySelector('#reset-code'),dirty=document.querySelector('#dirty');
-    const starterCode="import cadquery as cq\n\n# Change these values, then run the code\nlength = 40\nwidth = 30\nheight = 10\n\nresult = cq.Workplane('XY').box(length, width, height)";
-    function setStatus(text,isError=false){status.textContent=text;status.className=isError?'error':''}
-    function updateEditorState(){
-      const count=Math.max(1,code.value.split('\n').length);lines.textContent=Array.from({length:count},(_,i)=>i+1).join('\n');
-      const changed=selectedRevision?code.value!==selectedRevision.code:code.value!==starterCode;
-      dirty.textContent=changed?'● Unsaved changes':'';runCode.disabled=!code.value.trim()||!changed;resetCode.disabled=!changed;
-    }
-    function setEditor(source){code.value=source;code.scrollTop=0;lines.scrollTop=0;updateEditorState()}
-    function renderHistory(){
-      history.innerHTML='';
-      if(!project||!project.revisions.length){history.innerHTML='<div class="empty-history">Your verified build steps will appear here. Start with the main body, then add one feature at a time.</div>';return}
-      project.revisions.forEach(revision=>{
-        const button=document.createElement('button');button.className='revision'+(selectedRevision?.number===revision.number?' active':'');
-        button.innerHTML='<strong>v'+revision.number+'</strong><span></span>';button.querySelector('span').textContent=revision.instruction;
-        button.addEventListener('click',()=>selectRevision(revision));history.appendChild(button);
-      });
-    }
-    function selectRevision(revision){
-      selectedRevision=revision;renderHistory();setEditor(revision.code);title.textContent='Revision '+revision.number+' · '+revision.instruction;
-      step.href=revision.step_url;stl.href=revision.stl_url;step.style.display=stl.style.display='inline-block';
-      showModel(revision.stl_url+'?v='+encodeURIComponent(revision.run_id));
-      build.textContent='Build next step';setStatus('Building from revision '+revision.number+' · select another revision to branch from it');
-    }
-    async function createProject(){
-      const response=await fetch('/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:nameInput.value.trim()||'Untitled design'})});
-      if(!response.ok)throw new Error('Could not create the project');project=await response.json();localStorage.setItem('cadquery-project-id',project.project_id);selectedRevision=null;renderHistory();return project;
-    }
-    async function loadProject(){
-      const id=localStorage.getItem('cadquery-project-id');if(!id)return;
-      const response=await fetch('/projects/'+encodeURIComponent(id));if(!response.ok){localStorage.removeItem('cadquery-project-id');return}
-      project=await response.json();nameInput.value=project.name;if(project.revisions.length)selectRevision(project.revisions.at(-1));else renderHistory();
-    }
-    document.querySelector('#composer').addEventListener('submit',async event=>{
-      event.preventDefault();const instruction=prompt.value.trim();if(!instruction)return;
-      build.disabled=true;setStatus('Thinking, validating, and building locally…');
-      try{
-        if(!project)await createProject();
-        const response=await fetch('/projects/'+encodeURIComponent(project.project_id)+'/steps',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instruction,base_revision:selectedRevision?.number??null})});
-        const data=await response.json();if(!response.ok)throw new Error(data.detail||'Build step failed');
-        project=data;nameInput.value=project.name;prompt.value='';selectRevision(project.revisions.at(-1));setStatus('Step '+selectedRevision.number+' verified and saved · continue with the next feature');
-      }catch(error){setStatus(error.message,true)}finally{build.disabled=false}
-    });
-    document.querySelector('#new-project').addEventListener('click',()=>{project=null;selectedRevision=null;localStorage.removeItem('cadquery-project-id');nameInput.value='Untitled design';history.innerHTML='';renderHistory();setEditor(starterCode);title.textContent='New code';step.style.display=stl.style.display='none';if(mesh){scene.remove(mesh);mesh=null}empty.style.display='grid';build.textContent='Build first part';setStatus('New project ready · use a prompt or edit and run the starter code')});
-    document.querySelectorAll('.chip').forEach(chip=>chip.addEventListener('click',()=>{prompt.value=chip.dataset.prompt;prompt.focus();prompt.setSelectionRange(prompt.value.length,prompt.value.length)}));
-    document.querySelector('#copy').addEventListener('click',async()=>{await navigator.clipboard.writeText(code.value);setStatus('CadQuery source copied')});
-    code.addEventListener('input',updateEditorState);
-    code.addEventListener('scroll',()=>{lines.scrollTop=code.scrollTop});
-    code.addEventListener('keydown',event=>{
-      if(event.key==='Tab'){event.preventDefault();const start=code.selectionStart,end=code.selectionEnd;code.setRangeText('  ',start,end,'end');updateEditorState()}
-      if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();runCode.click()}
-    });
-    resetCode.addEventListener('click',()=>{setEditor(selectedRevision?.code||starterCode);setStatus('Code reset to the selected revision')});
-    runCode.addEventListener('click',async()=>{
-      if(runCode.disabled)return;runCode.disabled=true;build.disabled=true;setStatus('Validating and running your code in the isolated CAD worker…');
-      try{
-        if(!project)await createProject();
-        const response=await fetch('/projects/'+encodeURIComponent(project.project_id)+'/source',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:code.value,base_revision:selectedRevision?.number??null})});
-        const data=await response.json();if(!response.ok)throw new Error(data.detail||'Code run failed');
-        project=data;selectRevision(project.revisions.at(-1));setStatus('Code verified, rendered, and saved as revision '+selectedRevision.number);
-      }catch(error){setStatus(error.message,true);updateEditorState()}finally{build.disabled=false}
-    });
-    fetch('/config').then(r=>r.json()).then(data=>document.querySelector('#model').textContent='Local · '+data.model);
-    setEditor(starterCode);loadProject().catch(()=>setStatus('Could not restore the previous project',true));
-  </script>
+    <aside id="code-panel" class="panel drawer">
+      <div class="panel-head">
+        <span class="label">CadQuery Python</span>
+        <span id="dirty"></span>
+        <button class="ghost icon-only" data-close="code" title="Close" aria-label="Close code"><svg class="icon"><use href="#i-close"/></svg></button>
+      </div>
+      <div class="panel-head code-actions">
+        <button id="run-code" class="run" disabled title="Run code (Ctrl/Cmd + Enter)"><svg class="icon"><use href="#i-play"/></svg>Run code</button>
+        <button id="reset-code" disabled title="Discard your edits"><svg class="icon"><use href="#i-undo"/></svg>Reset</button>
+        <button id="copy" title="Copy code"><svg class="icon"><use href="#i-copy"/></svg>Copy</button>
+      </div>
+      <div class="editor">
+        <pre id="lines">1</pre>
+        <textarea id="code" spellcheck="false" aria-label="Editable CadQuery Python"></textarea>
+      </div>
+      <details class="log" open>
+        <summary class="label">Harness log<svg class="icon small"><use href="#i-chevron"/></svg></summary>
+        <pre id="log"></pre>
+      </details>
+    </aside>
+    <div class="backdrop"></div>
+  </main>
+
+  <dialog id="models-dialog">
+    <div class="dialog-head">
+      <strong>Models</strong>
+      <button id="close-models" class="ghost icon-only" type="button" title="Close" aria-label="Close"><svg class="icon"><use href="#i-close"/></svg></button>
+    </div>
+    <label class="field"><span class="label">Code model · writes CadQuery</span><select id="code-model"></select></label>
+    <label class="field"><span class="label">Vision model · reads drawings</span><select id="vision-model"></select></label>
+    <label class="field" id="voice-field"><span class="label">Voice model · speech to text (Whisper, local)</span><select id="voice-model"></select>
+      <span class="dialog-note">The first use downloads the chosen voice model once.</span></label>
+    <p id="cloud-warning" class="warning" hidden><svg class="icon"><use href="#i-cloud"/></svg><span>Not local: this runs on Hugging Face servers. Your prompt and drawing leave this machine, and the free tier has a monthly usage limit, so it can stop working when the quota runs out.</span></p>
+    <p id="cloud-note" class="dialog-note" hidden>Cloud models: set <code>HF_TOKEN</code> in <code>.env</code> to also use larger open models on Hugging Face (rate-limited).</p>
+    <p class="dialog-note">Add more with <code>./scripts/local_ollama.sh pull &lt;name&gt;</code>, then reopen this. Compare models with <code>cadquery-agent bench --model a --model b</code>.</p>
+    <div class="dialog-foot"><button id="done-models" class="primary" type="button">Done</button></div>
+  </dialog>
+
+  <dialog id="sketch">
+    <div class="dialog-head">
+      <strong>Draw your part</strong>
+      <button id="close-sketch" class="ghost icon-only" type="button" title="Close" aria-label="Close"><svg class="icon"><use href="#i-close"/></svg></button>
+    </div>
+    <div class="dialog-tools">
+      <button id="pen-tool" type="button" aria-pressed="true"><svg class="icon"><use href="#i-pen"/></svg>Pen</button>
+      <button id="eraser-tool" type="button" aria-pressed="false"><svg class="icon"><use href="#i-eraser"/></svg>Eraser</button>
+      <button id="undo-sketch" type="button"><svg class="icon"><use href="#i-undo"/></svg>Undo</button>
+      <button id="clear-sketch" type="button"><svg class="icon"><use href="#i-trash"/></svg>Clear</button>
+      <span class="hint hide-small">Write sizes on the drawing, e.g. 80 mm</span>
+    </div>
+    <canvas id="pad" width="640" height="440"></canvas>
+    <div class="dialog-foot">
+      <button id="cancel-sketch" type="button">Cancel</button>
+      <button id="use-sketch" class="primary" type="button"><svg class="icon"><use href="#i-check"/></svg>Use sketch</button>
+    </div>
+  </dialog>
+
+  <script type="module" src="/static/app.js"></script>
 </body>
 </html>

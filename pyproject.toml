@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cadquery-agent"
-version = "0.3.0"
-description = "Local iterative prompt-to-CadQuery studio for open-weight model servers."
+version = "0.4.0"
+description = "Local iterative CadQuery studio with text, sketch and voice input for open-weight models."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -19,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.9"]
+voice = ["av<19", "faster-whisper>=1.1"]
 
 [project.scripts]
 cadquery-agent = "cadquery_agent.cli:main"

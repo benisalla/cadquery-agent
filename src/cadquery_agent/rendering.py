@@ -1,8 +1,9 @@
 import asyncio
+import json
 import os
 import re
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -15,11 +16,16 @@ class RenderError(RuntimeError):
     """A validated script could not be rendered in the isolated worker."""
 
 
+class WorkerUnavailableError(RenderError):
+    """No container runtime can run the worker, so retrying the script cannot help."""
+
+
 @dataclass(frozen=True, slots=True)
 class RenderResult:
     run_id: str
     stl_path: Path
     step_path: Path
+    stats: dict = field(default_factory=dict)
 
 
 class DockerCadRenderer:
@@ -54,9 +60,7 @@ class DockerCadRenderer:
         except TimeoutError as error:
             process.kill()
             await process.communicate()
-            raise RenderError(
-                f"CAD rendering exceeded {self.timeout_seconds:g} seconds"
-            ) from error
+            raise RenderError(f"CAD rendering exceeded {self.timeout_seconds:g} seconds") from error
 
         if process.returncode != 0:
             detail = stderr.decode("utf-8", errors="replace").strip()
@@ -68,7 +72,9 @@ class DockerCadRenderer:
         step_path = output_dir / "model.step"
         if not stl_path.is_file() or not step_path.is_file():
             raise RenderError("CAD worker did not produce both STL and STEP files")
-        return RenderResult(run_id=run_id, stl_path=stl_path, step_path=step_path)
+        stats_path = output_dir / "stats.json"
+        stats = json.loads(stats_path.read_text()) if stats_path.is_file() else {}
+        return RenderResult(run_id=run_id, stl_path=stl_path, step_path=step_path, stats=stats)
 
     async def _select_runtime(self) -> str:
         for candidate in ("docker", "podman"):
@@ -88,7 +94,7 @@ class DockerCadRenderer:
                 continue
             if return_code == 0:
                 return candidate
-        raise RenderError(
+        raise WorkerUnavailableError(
             "No working container runtime was found. Start Docker or install rootless Podman, "
             "then run './scripts/build_worker.sh'."
         )

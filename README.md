@@ -1,177 +1,152 @@
 # CadQuery Studio
 
-A local harness that turns a text description, a reference image, or both into
-editable CadQuery Python, STL, and STEP. It calls a model server on loopback
-only, so prompts and images stay on your machine. The configured model must be
-open-weight.
+A small, readable **LLM harness** that turns text, voice, or a hand-drawn sketch into
+verified, editable CadQuery models (Python, STL, STEP). Everything runs on your machine
+with open-weight models; cloud models are opt-in and clearly labelled.
 
-## What it does
+The point of the project is to show how a harness turns a small model into a useful tool:
+the model only writes code, and the harness checks, runs, measures, and feeds errors back.
 
 ~~~mermaid
 flowchart LR
-  A["Text and/or image"] --> B["Local open-weight model"]
-  B --> C["CadQuery Python"]
-  C --> D["Static checks"]
-  D --> E["Isolated CadQuery worker"]
-  E --> F["3D preview + STL/STEP"]
+  V["Voice"] --> W["Whisper (local)"] --> P["Prompt"]
+  S["Sketch / photo"] --> VM["Vision model"] --> P
+  P --> M["Code model"] --> C["Static checks"] --> R["Sandboxed CadQuery render"] --> G["Geometry check"]
+  C -- problems --> M
+  R -- error line --> M
+  G -- invalid solid --> M
+  G --> UI["3D view · STL · STEP · new revision"]
 ~~~
 
-- Uses an OpenAI-compatible /chat/completions endpoint on localhost.
-- Supports text requests and image-plus-text requests using PNG, JPEG, or WebP.
-- Checks returned scripts before execution.
-- Runs generated code only in a no-network, read-only, resource-limited Docker
-  or rootless Podman container.
-- Shows an interactive Three.js preview and provides STL and STEP downloads.
-- Keeps local projects with immutable revision history for prompt-by-prompt builds.
-- Lets any older revision become the base for a new branch.
-- Shows the complete editable CadQuery source beside the live 3D preview.
-- Runs manual source edits as verified revisions with Ctrl/Command + Enter.
-- Repairs some CadQuery runtime failures automatically before saving a step.
+## The harness in one loop
 
-## Recommended models for this machine
+`src/cadquery_agent/agent.py` is the whole idea:
 
-This machine has 16 GiB RAM and no NVIDIA GPU, so start with quantized 1.5B-3B
-models served by Ollama:
+1. **System prompt** with short rules and the CadQuery facts small models get wrong.
+2. **Generate → check → render → measure.** Static checks block unsafe Python; the
+   script runs in a no-network, read-only container; the worker reports size, volume, validity.
+3. **Feedback as a conversation.** A failure becomes one short line
+   (`line 15: NameError: name 'hole_diameter' is not defined`) sent back to the model.
+   Only the latest failure is kept, so small context windows never overflow.
+4. **Cheap fixes without the model.** If the script forgets `result = ...`, the harness
+   adds it instead of spending another model call.
 
-- qwen2.5-coder:1.5b: recommended reliable text model, about 1 GB.
-- qwen2.5vl:3b: optional text-and-image model, about 3.2 GB and more RAM.
-- qwen2.5-coder:3b: stronger text-only option, about 1.9 GB.
+Per-model prompting lives in `src/cadquery_agent/models.py` (sampling, vision support,
+turning off "thinking" for reasoning models).
 
-Larger 7B+ models may run, but CPU generation will be slower and leave less
-memory for the rest of the system.
+## Project layout
 
-## 1. Start a local model server
+| File | Role |
+|---|---|
+| `agent.py` | the harness loop: prompt, generate, check, repair |
+| `models.py` | per-model prompt profiles |
+| `backend.py` | OpenAI-compatible client (local Ollama/vLLM, optional Hugging Face cloud) |
+| `validation.py` | static safety checks and small deterministic fixes |
+| `rendering.py`, `worker/render.py` | sandboxed CadQuery run and measurements |
+| `projects.py` | revisions, branching, manual code runs |
+| `speech.py` | local Whisper speech-to-text |
+| `bench.py` | model benchmark |
+| `api.py` | HTTP API, including the live progress stream |
+| `web/` | `index.html`, `styles.css`, `app.js`, and a local copy of three.js (works offline) |
 
-Install Ollama from its official installation instructions, then pull and run
-the recommended vision model:
+## Quick start
 
 ~~~bash
-ollama pull qwen2.5-coder:1.5b
-ollama serve
+uv sync --extra dev --extra voice   # Python deps, incl. local Whisper
+./scripts/setup_and_smoke_test.sh   # once: project-local Ollama + first model
+./scripts/start.sh                  # builds the worker if needed, starts everything
 ~~~
 
-This repository can also keep Ollama and its model data entirely inside the
-project. Run the automated setup and real generation check once:
+Open http://127.0.0.1:8000. If the port is busy: `CAD_AGENT_PORT=8010 ./scripts/start.sh`.
+The CAD worker needs Docker or rootless Podman.
+
+## Using the studio
+
+- **Type** a part and press Enter, or **Voice** to speak it (Stop & use / Cancel).
+- **Image** attaches a photo of a drawing; **Draw** opens a sketch pad (pen, eraser, undo).
+  Write the sizes on the drawing.
+- Build **one feature per step**. Each verified step is a revision; pick an older one to branch.
+- Edit the Python directly and press **Run code** (Ctrl/⌘ + Enter).
+- **Arrange** places copies of revisions in 3D: move, rotate, drop to floor, remove, then
+  **Join into model**. Joining writes plain CadQuery code, so the result stays editable.
+- **History** and **Code** panels open and close; on small screens they become drawers.
+- The **Harness log** shows every attempt and why it failed.
+
+## Models
+
+Click the model name in the top bar to switch. Every model below ran on this machine
+(16 GB RAM, 8 CPU cores, no GPU). Add any Ollama model with
+`./scripts/local_ollama.sh pull <name>`; it appears in the picker automatically.
+
+Measured with `cadquery-agent bench` (5 CAD tasks checked by size and volume, 3 attempts each):
+
+| Job | Model | Size | Result | Time | Notes |
+|---|---|---|---|---|---|
+| Code | **qwen2.5-coder:3b** (default) | 1.9 GB | 4/5 | 89 s | best balance |
+| Code | qwen3.5:4b | 3.3 GB | 4/5 | 221 s | thinking turned off by its profile |
+| Code | qwen2.5-coder:1.5b | 1.0 GB | 3/5 | 33 s | fastest, misreads more |
+| Drawing | **qwen3.5:4b** (default) | 3.3 GB | read 80 × 50 × 5 mm + Ø20 hole | 23 s | also writes code |
+| Drawing | qwen2.5vl:3b | 3.2 GB | read 80 × 50 × 5 mm + Ø20 hole | 95 s | |
+| Voice | **base.en** (default) | 145 MB | exact transcript | 1 s | Whisper via faster-whisper |
+| Voice | tiny.en | 75 MB | small word slips | 4 s* | |
+| Voice | small.en | 480 MB | exact transcript | 13 s | |
+
+\* includes the one-time model load. Results vary between runs; benchmark on your own machine.
+Researched but not tested here (disk space): `qwen3:4b-instruct-2507`, `qwen3-vl:4b-instruct`,
+`gemma3:4b`. Pull one and it appears in the picker.
+
+### Cloud models (optional, not local)
+
+Set `HF_TOKEN` in `.env` to also list larger open models served by Hugging Face
+(Qwen2.5-Coder-32B, Qwen3-Coder-30B, Qwen3.5-35B, Qwen3-VL-30B, Gemma-3-27B).
+They are marked with a cloud icon and an amber border in the UI. **They do not run on your machine:** prompts and drawings are
+sent to Hugging Face, and the free tier has a monthly quota, so they stop working when it
+runs out. Local models have no such limit.
+
+### Compare models yourself
 
 ~~~bash
-./scripts/setup_and_smoke_test.sh
+cadquery-agent bench --model qwen2.5-coder:3b --model qwen3.5:4b       # 5 CAD tasks
+cadquery-agent bench --vision-model qwen3.5:4b                          # reads a drawn plate
+cadquery-agent bench --voice-model base.en --audio clip.wav             # speech to text
 ~~~
 
-For later sessions, start the project-local server in one terminal:
+Code tasks pass only when the rendered part has the expected **size and volume**, so a
+misplaced hole or a "hole" built as a boss counts as a failure.
+
+## Configuration (`.env`)
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `CAD_AGENT_MODEL` | `qwen2.5-coder:3b` | default code model |
+| `CAD_AGENT_VISION_MODEL` | `qwen3.5:4b` | default model for drawings |
+| `CAD_AGENT_WHISPER_MODEL` | `base.en` | default voice model |
+| `CAD_AGENT_MAX_ATTEMPTS` | `3` | generate/repair rounds per step |
+| `HF_TOKEN` | empty | enables Hugging Face cloud models |
+| `OLLAMA_CONTEXT_LENGTH` | `8192` | set by `scripts/local_ollama.sh`; Ollama's CPU default (4k) silently drops history |
+
+The local model server must be on localhost; other URLs are rejected.
+
+## Command line and API
 
 ~~~bash
-./scripts/local_ollama.sh serve
+cadquery-agent generate --prompt "A 30 mm cube with a 10 mm through hole" --model qwen2.5-coder:3b
+cadquery-agent generate --image sketch.png
 ~~~
 
-Ollama normally listens on 127.0.0.1:11434. The harness also works with a local
-vLLM OpenAI-compatible server. Remote and hosted endpoint URLs are rejected.
-
-## 2. Install the harness
-
-~~~bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-pip install -e '.[dev]'
-cp .env.example .env
-~~~
-
-The example configuration uses qwen2.5-coder:1.5b for reliable text input on
-this machine. Set CAD_AGENT_MODEL to qwen2.5vl:3b only when image input is
-needed and enough memory is free.
-
-## 3. Build the safe CAD worker
-
-Install either Docker or rootless Podman, then run:
-
-~~~bash
-./scripts/build_worker.sh
-~~~
-
-The worker uses CadQuery/OpenCascade to create the real geometry. Generated
-code has no network, a read-only root filesystem, dropped Linux capabilities,
-and CPU, memory, process, and time limits.
-
-## 4. Open the text-to-3D interface
-
-The easiest start command builds the worker when needed, starts the project-local
-Ollama server, and opens the API on loopback:
-
-~~~bash
-./scripts/start.sh
-~~~
-
-Open http://127.0.0.1:8000, describe the base part, and select **Build first part**.
-Rotate and zoom the result, inspect its editable Python, or download STEP/STL.
-
-The studio supports two workflows at the same time:
-
-- Use **Add part**, **Change**, **Remove part**, or **Enhance** to describe an AI
-  revision in plain language.
-- Edit the complete Python source directly and select **Run code** to change a
-  dimension or construction operation precisely.
-
-Manual edits and prompt-based changes both become immutable revisions only
-after static validation and a successful isolated render. **Reset** restores
-the selected revision without affecting its saved geometry.
-
-### Build a complex object step by step
-
-Start with the largest base feature, then use one prompt per mechanical change:
-
-1. Create a 100 × 60 × 8 mm mounting plate.
-2. Add four 6 mm holes, each 10 mm from the nearest corner.
-3. Add a centered 24 mm diameter boss, 12 mm tall.
-4. Cut an 8 mm through-hole through the boss and plate.
-5. Add 3 mm fillets to the outside vertical edges.
-
-Every successful prompt becomes a selectable revision. Selecting an older
-revision before the next prompt creates a new branch from that geometry. A
-failed generation or render leaves the last working revision unchanged.
-
-## Command-line code generation
-
-Text prompt:
-
-~~~bash
-cadquery-agent generate --prompt "A 30 mm cube with a 10 mm through-hole centered on the top face"
-~~~
-
-Reference image plus prompt:
-
-~~~bash
-cadquery-agent generate --image part.png --prompt "Estimate the proportions; use millimeters"
-~~~
-
-Output defaults to artifacts/generated_part.py. Choose another path with
---output.
-
-## HTTP API
-
-~~~bash
-uvicorn cadquery_agent.api:app --host 127.0.0.1 --port 8000
-~~~
-
-Open http://127.0.0.1:8000/docs for the API. POST
-/projects/{project_id}/steps creates an AI revision and POST
-/projects/{project_id}/source validates, renders, and saves a manual source
-revision. POST /models/generate creates a text-driven model; POST
-/models/generate-image accepts an image and optional prompt. The older
-/generate endpoints remain available for code-only use. GET /health is a
-model-independent liveness check.
+API docs at `/docs`. Main routes: `POST /projects`, `POST /projects/{id}/steps`
+(form: `instruction`, `image`, `model`, `vision_model`, `base_revision`),
+`POST /projects/{id}/source` (JSON code), `GET /models`, `POST /transcribe`.
 
 ## Tests
 
 ~~~bash
-pytest
+.venv/bin/pytest
 ~~~
 
-Tests use a mocked local endpoint. They do not download a model or make network
-requests.
+Tests use fake model servers and renderers; they download nothing.
 
-## Current boundary
+## Limits
 
-Generated geometry must still be reviewed before fabrication. Small local models
-can misunderstand complex mechanical intent, and image-based dimensions are
-estimates unless the image includes scale or measurements. The editable Python
-and STEP output make correction possible without regenerating everything.
+Small local models still misread intent: always check dimensions before fabrication.
+Sketch dimensions are estimates unless written on the drawing.

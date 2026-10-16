@@ -37,3 +37,14 @@ def load_image(path: Path, max_bytes: int) -> ImageInput:
     if not path.is_file():
         raise FileNotFoundError(f"image does not exist: {path}")
     return validate_image_bytes(path.read_bytes(), max_bytes=max_bytes)
+
+
+def shrink_image(image: ImageInput, max_side: int = 1024) -> ImageInput:
+    """Large photos cost a vision model many tokens without adding detail."""
+    with Image.open(io.BytesIO(image.data)) as picture:
+        if max(picture.size) <= max_side:
+            return image
+        picture.thumbnail((max_side, max_side))
+        buffer = io.BytesIO()
+        picture.convert("RGB").save(buffer, format="PNG")
+    return ImageInput(data=buffer.getvalue(), media_type="image/png")

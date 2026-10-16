@@ -1,4 +1,9 @@
-from cadquery_agent.validation import extract_python_code, validate_cadquery_source
+from cadquery_agent.validation import (
+    check_geometry,
+    ensure_result,
+    extract_python_code,
+    validate_cadquery_source,
+)
 
 
 def test_accepts_basic_cadquery_source() -> None:
@@ -61,3 +66,18 @@ result = base.union(boss)"""
     result = validate_cadquery_source(source)
     assert not result.is_valid
     assert "unsupported constructor: cq.Cylinder; use cq.Workplane methods" in result.errors
+
+
+def test_geometry_check_flags_invalid_or_empty_solids() -> None:
+    assert check_geometry({}) == ()
+    assert check_geometry({"size": [1, 1, 1], "volume": 1.0, "valid": True}) == ()
+    problems = check_geometry({"size": [0, 0, 0], "volume": 0.0, "valid": False})
+    assert len(problems) == 2
+
+
+def test_ensure_result_aliases_the_last_assigned_object() -> None:
+    source = "import cadquery as cq\nplate = cq.Workplane('XY').box(10, 10, 2)"
+    fixed = ensure_result(source)
+    assert fixed.endswith("result = plate")
+    assert validate_cadquery_source(fixed).is_valid
+    assert ensure_result(fixed) == fixed

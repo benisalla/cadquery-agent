@@ -1,4 +1,5 @@
 import ast
+import re
 from dataclasses import dataclass
 
 _BLOCKED_CALLS = {"compile", "eval", "exec", "input", "open", "__import__"}
@@ -12,7 +13,13 @@ class ValidationResult:
     errors: tuple[str, ...]
 
 
+def strip_thinking(text: str) -> str:
+    """Reasoning models may prefix their answer with a <think> block."""
+    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+
+
 def extract_python_code(text: str) -> str:
+    text = strip_thinking(text)
     marker = chr(96) * 3
     if marker not in text:
         return text.strip()
@@ -62,16 +69,7 @@ def validate_cadquery_source(source: str) -> ValidationResult:
         elif isinstance(node, ast.Attribute) and node.attr.startswith("__"):
             errors.append(f"dunder attribute is not allowed: {node.attr}")
 
-    assigned_names: set[str] = set()
-    for node in ast.walk(tree):
-        targets = node.targets if isinstance(node, ast.Assign) else ()
-        if isinstance(node, ast.AnnAssign):
-            targets = (node.target,)
-        for target in targets:
-            if isinstance(target, ast.Name):
-                assigned_names.add(target.id)
-
-    if not assigned_names.intersection({"result", "solid"}):
+    if not _assigned_names(tree).intersection({"result", "solid"}):
         errors.append("code must assign the final CadQuery object to result or solid")
 
     has_workplane = any(
@@ -85,3 +83,40 @@ def validate_cadquery_source(source: str) -> ValidationResult:
     if not has_workplane:
         errors.append("code must construct geometry with cq.Workplane(...)")
     return ValidationResult(is_valid=not errors, errors=tuple(dict.fromkeys(errors)))
+
+
+def ensure_result(source: str) -> str:
+    """Small models often name the final object after the part; alias it instead of retrying."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return source
+    if not tree.body or _assigned_names(tree).intersection({"result", "solid"}):
+        return source
+    last = tree.body[-1]
+    if isinstance(last, ast.Assign) and len(last.targets) == 1:
+        target = last.targets[0]
+        if isinstance(target, ast.Name):
+            return f"{source.rstrip()}\n\nresult = {target.id}"
+    return source
+
+
+def _assigned_names(tree: ast.AST) -> set[str]:
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        targets = node.targets if isinstance(node, ast.Assign) else ()
+        if isinstance(node, ast.AnnAssign):
+            targets = (node.target,)
+        names.update(target.id for target in targets if isinstance(target, ast.Name))
+    return names
+
+
+def check_geometry(stats: dict) -> tuple[str, ...]:
+    if not stats:
+        return ()
+    problems = []
+    if not stats.get("valid", True):
+        problems.append("the solid is invalid (broken or self-intersecting faces)")
+    if stats.get("volume", 0) <= 0:
+        problems.append("the solid has no volume")
+    return tuple(problems)
