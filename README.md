@@ -66,7 +66,10 @@ The CAD worker needs Docker or rootless Podman.
 - **Image** attaches a photo of a drawing; **Draw** opens a sketch pad (pen, eraser, undo).
   Write the sizes on the drawing.
 - Build **one feature per step**. Each verified step is a revision; pick an older one to branch.
-- Edit the Python directly and press **Run code** (Ctrl/⌘ + Enter).
+- Edit the Python directly and press **Run code** (Ctrl/Cmd + Enter).
+- **Parameters** turns every named number in the code (`plate_length = 100`) into a slider;
+  the 3D view updates live and nothing is saved until **Save as revision**. This is the
+  quickest way to fix a size the model got wrong.
 - **Arrange** places copies of revisions in 3D: move, rotate, drop to floor, remove, then
   **Join into model**. Joining writes plain CadQuery code, so the result stays editable.
 - **History** and **Code** panels open and close; on small screens they become drawers.
