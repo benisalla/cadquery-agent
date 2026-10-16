@@ -59,7 +59,8 @@ def matches(case: Case, stats: dict) -> str:
     size = sorted(stats.get("size", ()))
     if len(size) != 3 or any(abs(a - b) > 0.5 for a, b in zip(size, sorted(case.size))):
         return f"size {stats.get('size')} != {list(case.size)}"
-    if abs(stats.get("volume", 0) - case.volume) > 0.02 * case.volume:
+    # CAD volumes are exact, so a tight tolerance catches small features such as holes.
+    if abs(stats.get("volume", 0) - case.volume) > 0.0005 * case.volume:
         return f"volume {stats.get('volume', 0):.0f} != {case.volume:.0f}"
     return ""
 

@@ -12,6 +12,9 @@ from cadquery_agent.settings import Settings
 _IMAGE_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,199}$")
 
 
+_detected_runtime: str | None = None
+
+
 class RenderError(RuntimeError):
     """A validated script could not be rendered in the isolated worker."""
 
@@ -77,6 +80,13 @@ class DockerCadRenderer:
         return RenderResult(run_id=run_id, stl_path=stl_path, step_path=step_path, stats=stats)
 
     async def _select_runtime(self) -> str:
+        # Detect once: a busy machine can make `info` slow, which must not look like "no runtime".
+        global _detected_runtime
+        if _detected_runtime is None:
+            _detected_runtime = await self._detect_runtime()
+        return _detected_runtime
+
+    async def _detect_runtime(self) -> str:
         for candidate in ("docker", "podman"):
             if shutil.which(candidate) is None:
                 continue
@@ -87,7 +97,7 @@ class DockerCadRenderer:
                 stderr=asyncio.subprocess.DEVNULL,
             )
             try:
-                return_code = await asyncio.wait_for(process.wait(), timeout=5)
+                return_code = await asyncio.wait_for(process.wait(), timeout=20)
             except TimeoutError:
                 process.kill()
                 await process.wait()

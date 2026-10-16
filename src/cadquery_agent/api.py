@@ -9,7 +9,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.responses import FileResponse, HTMLResponse, StreamingResponse
 from starlette.staticfiles import StaticFiles
 
-from cadquery_agent.agent import CadQueryAgent, GenerationError
+from cadquery_agent.agent import CadQueryAgent, GenerationError, check_script
 from cadquery_agent.backend import ModelServerError, OpenAICompatibleBackend, is_cloud
 from cadquery_agent.images import validate_image_bytes
 from cadquery_agent.models import profile_for
@@ -66,6 +66,17 @@ class ProjectSourceRequest(BaseModel):
     code: str = Field(min_length=1, max_length=100_000)
     base_revision: int | None = Field(default=None, ge=1)
     label: str | None = Field(default=None, max_length=200)
+
+
+class PreviewRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=100_000)
+
+
+class PreviewResponse(BaseModel):
+    run_id: str
+    stl_url: str
+    step_url: str
+    size: list[float]
 
 
 class RevisionResponse(BaseModel):
@@ -295,6 +306,26 @@ async def stream_project_step(
         await task
 
     return StreamingResponse(lines(), media_type="application/x-ndjson")
+
+
+@app.post("/preview", response_model=PreviewResponse)
+async def preview_source(
+    request: PreviewRequest,
+    renderer: Annotated[DockerCadRenderer, Depends(get_renderer)],
+) -> PreviewResponse:
+    """Check and render code without saving a revision (live parameter editing)."""
+    try:
+        problems, rendered = await check_script(request.code.strip(), renderer)
+    except WorkerUnavailableError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    if problems or rendered is None:
+        raise HTTPException(status_code=422, detail="; ".join(problems))
+    return PreviewResponse(
+        run_id=rendered.run_id,
+        stl_url=f"/artifacts/{rendered.run_id}/model.stl",
+        step_url=f"/artifacts/{rendered.run_id}/model.step",
+        size=rendered.stats.get("size", []),
+    )
 
 
 @app.post("/projects/{project_id}/source", response_model=ProjectResponse)

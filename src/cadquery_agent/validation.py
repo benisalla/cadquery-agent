@@ -85,6 +85,36 @@ def validate_cadquery_source(source: str) -> ValidationResult:
     return ValidationResult(is_valid=not errors, errors=tuple(dict.fromkeys(errors)))
 
 
+def lint_cadquery(source: str) -> tuple[str, ...]:
+    """Catch CadQuery mistakes small models make often, before spending a render."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return ()
+    problems = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.args):
+            continue
+        argument = node.args[0]
+        halved = (
+            isinstance(argument, ast.BinOp)
+            and isinstance(argument.op, ast.Div)
+            and isinstance(argument.right, ast.Constant)
+            and argument.right.value == 2
+        )
+        if node.func.attr == "hole" and halved:
+            problems.append(
+                f"line {node.lineno}: hole() takes the full diameter; do not divide by 2"
+            )
+        if (
+            node.func.attr == "circle"
+            and isinstance(argument, ast.Name)
+            and "diameter" in argument.id.lower()
+        ):
+            problems.append(f"line {node.lineno}: circle() takes a radius; use {argument.id} / 2")
+    return tuple(problems)
+
+
 def ensure_result(source: str) -> str:
     """Small models often name the final object after the part; alias it instead of retrying."""
     try:

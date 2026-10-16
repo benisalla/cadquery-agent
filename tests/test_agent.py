@@ -164,3 +164,26 @@ def test_typed_words_override_the_sketch_description() -> None:
     task = backend.calls[1][0][1]["content"]
     assert "Sketch description:\n- plate 150 x 75 mm" in task
     assert "Request (it overrides the sketch description): an 80 x 50 mm plate" in task
+
+
+def test_lint_problems_are_fed_back_before_rendering() -> None:
+    halved = "import cadquery as cq\nd = 6\nresult = cq.Workplane('XY').box(9, 9, 2).hole(d / 2)"
+    backend = FakeBackend([halved, BOX])
+    renderer = FakeRenderer([None])
+    result = asyncio.run(
+        CadQueryAgent(backend, model="coder", renderer=renderer).generate(prompt="x")
+    )
+    assert result.trace[0].problems == (
+        "line 3: hole() takes the full diameter; do not divide by 2",
+    )
+    assert renderer.calls == 1
+
+
+def test_revision_task_states_the_current_measured_size() -> None:
+    backend = FakeBackend([BOX])
+    asyncio.run(
+        CadQueryAgent(backend, model="coder").generate(
+            prompt="add a hole", existing_source=BOX, existing_size=[100.0, 60.0, 8.0]
+        )
+    )
+    assert "The current part measures 100 x 60 x 8 mm" in backend.calls[0][0][1]["content"]

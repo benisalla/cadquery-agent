@@ -13,6 +13,7 @@ from cadquery_agent.validation import (
     check_geometry,
     ensure_result,
     extract_python_code,
+    lint_cadquery,
     strip_thinking,
     validate_cadquery_source,
 )
@@ -133,6 +134,7 @@ class CadQueryAgent:
         prompt: str = "",
         image: ImageInput | None = None,
         existing_source: str | None = None,
+        existing_size: list[float] | None = None,
         model: str | None = None,
         vision_model: str | None = None,
         on_event: Events | None = None,
@@ -146,7 +148,7 @@ class CadQueryAgent:
         if image is not None:
             emit({"event": "stage", "stage": "describe"})
             sketch_description = await self.describe(image, vision_model or self.vision_model)
-        task = _task(prompt, sketch_description, existing_source)
+        task = _task(prompt, sketch_description, existing_source, existing_size)
 
         # Only the latest failed attempt is kept, so small context windows never overflow.
         conversation = [{"role": "system", "content": SYSTEM_PROMPT}, user_message(task)]
@@ -158,7 +160,9 @@ class CadQueryAgent:
             reply = await self.backend.chat(messages, model)
             code = ensure_result(extract_python_code(reply))
             emit({"event": "stage", "stage": "verify", **step})
-            problems, render = await check_script(code, self.renderer)
+            problems, render = lint_cadquery(code), None
+            if not problems:
+                problems, render = await check_script(code, self.renderer)
             trace.append(Attempt(code, problems))
             if not problems:
                 return GenerationResult(code, model, tuple(trace), render, sketch_description)
@@ -175,10 +179,20 @@ class CadQueryAgent:
         return strip_thinking(reply)
 
 
-def _task(prompt: str, sketch_description: str | None, existing_source: str | None) -> str:
+def _task(
+    prompt: str,
+    sketch_description: str | None,
+    existing_source: str | None,
+    existing_size: list[float] | None = None,
+) -> str:
     parts = []
     if existing_source is not None:
         parts.append(f"Current script:\n```python\n{existing_source}\n```")
+    if existing_source is not None and existing_size:
+        size = " x ".join(f"{value:g}" for value in existing_size)
+        parts.append(
+            f"The current part measures {size} mm; keep that unless the request changes it."
+        )
     if sketch_description:
         parts.append(f"Sketch description:\n{sketch_description}")
     if prompt and existing_source is not None:

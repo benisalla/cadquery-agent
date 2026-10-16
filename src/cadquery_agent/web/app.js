@@ -7,6 +7,7 @@ const $ = (selector) => document.querySelector(selector);
 
 const STORAGE_KEY = 'cadquery-project-id';
 const MODELS_KEY = 'cadquery-models';
+const PARAMS_KEY = 'cadquery-params-collapsed';
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 const MAX_RECORDING_SECONDS = 60;
 const METER_BARS = 22;
@@ -24,7 +25,7 @@ result = cq.Workplane('XY').box(length, width, height)`;
 const ui = {
   history: $('#history'), nameInput: $('#project-name'), model: $('#model'), modelLabel: $('#model-label'),
   title: $('#revision-title'), size: $('#size'), step: $('#step'), stl: $('#stl'), empty: $('#empty'),
-  viewerLoading: $('#viewer-loading'), busyBar: $('#busy-bar'),
+  viewerLoading: $('#viewer-loading'), loadingText: $('#viewer-loading-text'), busyBar: $('#busy-bar'),
   progress: $('#progress'), progressTitle: $('#progress-title'), progressAttempt: $('#progress-attempt'),
   progressSteps: $('#progress-steps'), progressNote: $('#progress-note'), progressClose: $('#progress-close'),
   composer: $('#composer'), prompt: $('#prompt'), status: $('#status'), build: $('#build'), buildLabel: $('#build-label'),
@@ -39,6 +40,8 @@ const ui = {
   moveTool: $('#move-tool'), rotateTool: $('#rotate-tool'), dropPart: $('#drop-part'),
   removePart: $('#remove-part'), joinParts: $('#join-parts'),
   sketch: $('#sketch'), pad: $('#pad'), penTool: $('#pen-tool'), eraserTool: $('#eraser-tool'),
+  params: $('#params'), paramsToggle: $('#params-toggle'), paramsCount: $('#params-count'), paramsBody: $('#params-body'),
+  paramsSave: $('#params-save'), paramsDiscard: $('#params-discard'), paramsError: $('#params-error'), paramList: $('#param-list'),
 };
 
 let project = null;
@@ -97,6 +100,8 @@ const geometryCache = new Map();
 let mesh = null;
 let grid = null;
 let viewToken = 0;
+let loadingModel = false;
+let previewing = false;
 
 function setupViewer() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -171,24 +176,31 @@ function clearModel() {
   mesh = null;
 }
 
-async function showModel(revision) {
+function updateLoading() {
+  ui.loadingText.textContent = previewing ? 'Previewing' : 'Loading model';
+  ui.viewerLoading.hidden = !loadingModel && !previewing;
+}
+
+async function showModel(revision, fit = true) {
   const token = ++viewToken;
-  const spinner = setTimeout(() => { ui.viewerLoading.hidden = false; }, 150);
+  const spinner = setTimeout(() => { loadingModel = true; updateLoading(); }, 150);
   try {
     const source = await loadGeometry(revision);
     if (token !== viewToken) return;
+    fit = fit || !mesh;
     clearModel();
     const material = new THREE.MeshStandardMaterial({ color: 0x7fa3ff, metalness: 0.18, roughness: 0.36 });
     mesh = new THREE.Mesh(standingGeometry(source), material);
     mesh.visible = !arranging;
     scene.add(mesh);
     ui.empty.hidden = true;
-    if (!arranging) fitView();
+    if (fit && !arranging) fitView();
   } catch {
     if (token === viewToken) setStatus('Preview failed to load', true);
   } finally {
     clearTimeout(spinner);
-    if (token === viewToken) ui.viewerLoading.hidden = true;
+    if (token === viewToken) loadingModel = false;
+    updateLoading();
   }
 }
 
@@ -234,10 +246,12 @@ function setupArrange() {
 
 function setArrange(on) {
   arranging = on;
+  cancelPreview();
   ui.arrange.setAttribute('aria-pressed', String(on));
   ui.tray.hidden = !on;
   partsGroup.visible = on;
   if (mesh) mesh.visible = !on;
+  updateParamsPanel();
   if (!on) {
     selectPart(null);
     [...parts].forEach(removePart);
@@ -408,7 +422,7 @@ function joinParts() {
   if (ui.joinParts.disabled) return;
   const code = joinedSource();
   setEditor(code);
-  saveSource(code, `Joined ${parts.length} part(s) as`, `Joined ${parts.length} part(s) in Arrange`);
+  saveSource(code, { label: `Joined ${parts.length} part(s) in Arrange`, done: `Joined ${parts.length} part(s) as`, joining: true });
 }
 
 // ---------- Server ----------
@@ -768,14 +782,21 @@ function formatSize(size) {
   return size.map((value) => Math.round(value * 10) / 10).join(' × ') + ' mm';
 }
 
+function showSize(size, preview = false) {
+  ui.size.textContent = formatSize(size);
+  ui.size.classList.toggle('preview', preview);
+  ui.size.title = preview ? 'Unsaved preview' : '';
+}
+
 function selectRevision(revision) {
   selectedRevision = revision;
+  previewShown = false;
   markActiveRevision();
   renderLog(revision);
   setEditor(revision.code);
   ui.title.textContent = `v${revision.number} · ${revision.instruction || 'Image prompt'}`;
   ui.title.title = revision.instruction;
-  ui.size.textContent = formatSize(revision.size);
+  showSize(revision.size);
   ui.step.href = revision.step_url;
   ui.stl.href = revision.stl_url;
   ui.step.hidden = ui.stl.hidden = false;
@@ -789,6 +810,7 @@ function newProject() {
   if (busy) return;
   setArrange(false);
   selectedRevision = null;
+  previewShown = false;
   setProject(null);
   rememberProject(null);
   hideProgress();
@@ -798,10 +820,11 @@ function newProject() {
   renderLog(null);
   setEditor(STARTER_CODE);
   viewToken += 1;
-  ui.viewerLoading.hidden = true;
+  loadingModel = false;
+  updateLoading();
   clearModel();
   ui.title.textContent = 'No model yet';
-  ui.size.textContent = '';
+  showSize(null);
   ui.step.hidden = ui.stl.hidden = true;
   ui.empty.hidden = false;
   ui.buildLabel.textContent = idleBuildLabel();
@@ -909,23 +932,33 @@ function updateEditorState() {
   ui.dirty.textContent = changed ? 'edited' : '';
   ui.runCode.disabled = busy || !ui.code.value.trim() || (!changed && Boolean(selectedRevision));
   ui.resetCode.disabled = !changed;
+  ui.paramList.disabled = busy;
+  updateParamsPanel();
 }
 
 function setEditor(source) {
+  cancelPreview();
   ui.code.value = source;
   ui.code.scrollTop = 0;
   ui.code.scrollLeft = 0;
   ui.lines.scrollTop = 0;
   updateEditorState();
+  refreshParams();
+}
+
+function discardEdits() {
+  setEditor(selectedRevision?.code || STARTER_CODE);
+  restoreModel();
+  setStatus('Edits discarded');
 }
 
 function runCode() {
-  if (!ui.runCode.disabled) saveSource(ui.code.value, 'Code saved as');
+  if (!ui.runCode.disabled) saveSource(ui.code.value);
 }
 
-async function saveSource(code, doneText, label = null) {
-  setBusy('Checking & rendering…', label ? 'Joining' : 'Running');
-  openProgress(label ? 'Joining parts' : 'Running your code', ['verify', 'done']);
+async function saveSource(code, { label = null, done = 'Code saved as', joining = false } = {}) {
+  setBusy('Checking & rendering…', joining ? 'Joining' : 'Running');
+  openProgress(joining ? 'Joining parts' : 'Running your code', ['verify', 'done']);
   try {
     await ensureProject();
     const next = await postJson(projectPath('/source'), {
@@ -938,10 +971,10 @@ async function saveSource(code, doneText, label = null) {
     selectRevision(project.revisions.at(-1));
     setBusy(null);
     finishProgress(`v${selectedRevision.number} ready`);
-    setStatus(`${doneText} v${selectedRevision.number}`);
+    setStatus(`${done} v${selectedRevision.number}`);
   } catch (error) {
     setBusy(null);
-    failProgress(label ? 'Join failed' : 'Run failed', error.message);
+    failProgress(joining ? 'Join failed' : 'Run failed', error.message);
     showError(error);
   }
 }
@@ -950,12 +983,261 @@ function handleEditorKeys(event) {
   if (event.key === 'Tab') {
     event.preventDefault();
     ui.code.setRangeText('  ', ui.code.selectionStart, ui.code.selectionEnd, 'end');
-    updateEditorState();
+    editorTyped();
   }
   if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
     event.preventDefault();
     runCode();
   }
+}
+
+// ---------- Parameters: edit named numbers in the code, preview live ----------
+
+// A line that is exactly `name = number`, optionally indented and with a trailing comment.
+const PARAM_LINE = /^(\s*[A-Za-z_]\w*\s*=\s*)(-?(?:\d+\.?\d*|\.\d+))(\s*(?:#.*)?)$/;
+const FUNCTION_LINE = /^def\s+(\w+)\s*\(/;
+
+let params = [];
+let parseTimer = null;
+let previewTimer = null;
+let previewToken = 0;
+let previewShown = false;
+
+function parseParameters(code) {
+  const found = [];
+  const seen = new Map();
+  let group = '';
+  code.split('\n').forEach((line, index) => {
+    if (/^\S/.test(line) && !line.startsWith('#')) group = line.match(FUNCTION_LINE)?.[1] || '';
+    const match = line.match(PARAM_LINE);
+    if (!match) return;
+    const name = match[1].split('=')[0].trim();
+    if (name === 'result') return;
+    const inFunction = /^\s/.test(line) ? group : '';
+    const key = inFunction + ':' + name;
+    seen.set(key, (seen.get(key) || 0) + 1);
+    found.push({
+      key: key + '#' + seen.get(key), name, group: inFunction, line: index,
+      prefix: match[1], text: match[2], suffix: match[3],
+      value: Number(match[2]), isFloat: match[2].includes('.'),
+    });
+  });
+  return found;
+}
+
+const readable = (name) => name.replace(/_/g, ' ');
+
+function paramUnit(name) {
+  const lower = name.toLowerCase();
+  if (/angle|deg/.test(lower)) return '°';
+  if (/count|number|(^|_)n_/.test(lower)) return '';
+  return 'mm';
+}
+
+function formatParam(value, isFloat) {
+  if (!isFloat && Number.isInteger(value)) return String(value);
+  return Number.isInteger(value) ? value.toFixed(1) : String(Number(value.toFixed(4)));
+}
+
+function sliderRange(value) {
+  const span = Math.max(2 * Math.abs(value), Math.abs(value) + 10);
+  return value < 0 ? [-span, span] : [0, span];
+}
+
+function paramRow(param, index) {
+  const row = document.createElement('div');
+  const label = document.createElement('label');
+  const number = document.createElement('input');
+  const range = document.createElement('input');
+  const unit = document.createElement('span');
+  const step = param.isFloat ? '0.1' : '1';
+  const [min, max] = sliderRange(baselineValue(param) ?? param.value);
+  row.className = 'param';
+  label.textContent = readable(param.name);
+  label.title = param.name;
+  label.htmlFor = number.id = 'param-' + index;
+  number.type = 'number';
+  range.type = 'range';
+  number.step = range.step = step;
+  range.min = min;
+  range.max = Math.max(max, param.value);
+  number.value = range.value = param.text;
+  range.setAttribute('aria-label', readable(param.name) + ' slider');
+  unit.className = 'unit';
+  unit.textContent = paramUnit(param.name);
+  number.addEventListener('input', () => editParam(index, number.value));
+  number.addEventListener('change', () => { number.value = params[index].text; });
+  range.addEventListener('input', () => editParam(index, range.value));
+  row.append(label, range, number, unit);
+  return row;
+}
+
+function groupTitle(name) {
+  const title = document.createElement('div');
+  title.className = 'param-group';
+  title.textContent = name;
+  return title;
+}
+
+function renderParams() {
+  const rows = [];
+  params.forEach((param, index) => {
+    if (param.group && param.group !== params[index - 1]?.group) rows.push(groupTitle(param.group));
+    rows.push(paramRow(param, index));
+  });
+  ui.paramList.replaceChildren(...rows);
+}
+
+// Writes the values into the existing rows, leaving the control the user is holding alone.
+function syncParamRows() {
+  ui.paramList.querySelectorAll('.param').forEach((row, index) => {
+    row.querySelectorAll('input').forEach((input) => {
+      if (input.type === 'range' && params[index].value > Number(input.max)) input.max = params[index].value;
+      if (input !== document.activeElement) input.value = params[index].text;
+    });
+  });
+}
+
+function refreshParams() {
+  clearTimeout(parseTimer);
+  parseTimer = null;
+  const next = parseParameters(ui.code.value);
+  const sameRows = next.map((param) => param.key).join() === params.map((param) => param.key).join();
+  params = next;
+  if (sameRows) syncParamRows();
+  else renderParams();
+  updateParamsPanel();
+}
+
+function editorTyped() {
+  updateEditorState();
+  clearTimeout(parseTimer);
+  parseTimer = setTimeout(refreshParams, 300);
+}
+
+function baselineParams() {
+  return parseParameters(selectedRevision?.code ?? STARTER_CODE);
+}
+
+function baselineValue(param) {
+  return baselineParams().find((old) => old.key === param.key)?.value;
+}
+
+function updateParamsPanel() {
+  const changed = isCodeChanged();
+  ui.params.hidden = arranging || !params.length;
+  ui.paramsCount.textContent = params.length;
+  ui.paramsSave.hidden = ui.paramsDiscard.hidden = !changed;
+  ui.paramsSave.disabled = ui.paramsDiscard.disabled = busy;
+}
+
+function editParam(index, raw) {
+  if (parseTimer) refreshParams();
+  const param = params[index];
+  const value = Number(raw);
+  if (!param || raw === '' || !Number.isFinite(value)) return;
+  const lines = ui.code.value.split('\n');
+  if (!lines[param.line]?.startsWith(param.prefix)) return refreshParams();
+  param.value = value;
+  param.text = formatParam(value, param.isFloat);
+  lines[param.line] = param.prefix + param.text + param.suffix;
+  replaceEditorText(lines.join('\n'));
+  syncParamRows();
+  updateEditorState();
+  schedulePreview();
+}
+
+function replaceEditorText(code) {
+  const { scrollTop, scrollLeft } = ui.code;
+  ui.code.value = code;
+  ui.code.scrollTop = ui.lines.scrollTop = scrollTop;
+  ui.code.scrollLeft = scrollLeft;
+}
+
+function setCollapsed(collapsed) {
+  ui.params.classList.toggle('collapsed', collapsed);
+  ui.paramsToggle.setAttribute('aria-expanded', String(!collapsed));
+  ui.paramsBody.hidden = collapsed;
+  try {
+    localStorage.setItem(PARAMS_KEY, collapsed ? '1' : '');
+  } catch {}
+}
+
+function savedCollapsed() {
+  try {
+    return localStorage.getItem(PARAMS_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function showParamError(message) {
+  ui.paramsError.textContent = message;
+  ui.paramsError.hidden = !message;
+}
+
+function schedulePreview() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(runPreview, 400);
+}
+
+function cancelPreview() {
+  clearTimeout(previewTimer);
+  previewToken += 1;
+  previewing = false;
+  updateLoading();
+  showParamError('');
+}
+
+// Only the newest request may change the view: older answers are dropped.
+async function runPreview() {
+  const token = ++previewToken;
+  previewing = true;
+  updateLoading();
+  try {
+    const result = await postJson('/preview', { code: ui.code.value });
+    if (token !== previewToken) return;
+    showParamError('');
+    showSize(result.size, true);
+    previewShown = true;
+    previewing = false;
+    await showModel(result, false);
+  } catch (error) {
+    if (token !== previewToken) return;
+    showParamError(error.message);
+    logLine('preview failed: ' + error.message, 'fail');
+    setStatus('Preview failed · the last good model is still shown', true);
+  } finally {
+    if (token === previewToken) previewing = false;
+    updateLoading();
+  }
+}
+
+function restoreModel() {
+  if (!previewShown) return;
+  previewShown = false;
+  showSize(selectedRevision?.size);
+  if (selectedRevision) {
+    showModel(selectedRevision, false);
+    return;
+  }
+  viewToken += 1;
+  clearModel();
+  ui.empty.hidden = false;
+}
+
+function changeLabel() {
+  const before = new Map(baselineParams().map((param) => [param.key, param.value]));
+  const changes = params
+    .filter((param) => before.has(param.key) && before.get(param.key) !== param.value)
+    .map((param) => `${readable(param.name)} to ${param.text}`);
+  if (!changes.length) return 'Edited the code';
+  const shown = changes.slice(0, 3).join(', ');
+  return 'Changed ' + shown + (changes.length > 3 ? ` and ${changes.length - 3} more` : '');
+}
+
+function saveParams() {
+  if (!busy && isCodeChanged()) saveSource(ui.code.value, { label: changeLabel(), done: 'Saved as' });
 }
 
 // ---------- Image attachments ----------
@@ -1257,14 +1539,14 @@ function bindEvents() {
       setStatus('Copy is blocked by the browser', true);
     }
   });
-  ui.code.addEventListener('input', updateEditorState);
+  ui.code.addEventListener('input', editorTyped);
   ui.code.addEventListener('scroll', () => { ui.lines.scrollTop = ui.code.scrollTop; });
   ui.code.addEventListener('keydown', handleEditorKeys);
   ui.runCode.addEventListener('click', runCode);
-  ui.resetCode.addEventListener('click', () => {
-    setEditor(selectedRevision?.code || STARTER_CODE);
-    setStatus('Code reset');
-  });
+  ui.resetCode.addEventListener('click', discardEdits);
+  ui.paramsDiscard.addEventListener('click', discardEdits);
+  ui.paramsSave.addEventListener('click', saveParams);
+  ui.paramsToggle.addEventListener('click', () => setCollapsed(!ui.params.classList.contains('collapsed')));
 }
 
 fitPanelsToScreen();
@@ -1272,6 +1554,7 @@ setupViewer();
 setupArrange();
 setupMeter();
 bindEvents();
+setCollapsed(savedCollapsed());
 renderHistory();
 renderLog(null);
 setEditor(STARTER_CODE);

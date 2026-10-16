@@ -32,3 +32,22 @@ def test_artifact_path_accepts_only_uuid_and_known_format(tmp_path: Path) -> Non
         artifact_path(tmp_path, "../../etc", "stl")
     with pytest.raises(FileNotFoundError):
         artifact_path(tmp_path, run_id, "py")
+
+
+def test_container_runtime_is_detected_once(tmp_path: Path, monkeypatch) -> None:
+    import asyncio
+
+    from cadquery_agent import rendering
+
+    calls = []
+
+    async def detect(self) -> str:
+        calls.append(1)
+        return "podman"
+
+    monkeypatch.setattr(rendering, "_detected_runtime", None)
+    monkeypatch.setattr(DockerCadRenderer, "_detect_runtime", detect)
+    renderer = DockerCadRenderer(Settings(), artifacts_root=tmp_path)
+    assert asyncio.run(renderer._select_runtime()) == "podman"
+    assert asyncio.run(renderer._select_runtime()) == "podman"
+    assert calls == [1]

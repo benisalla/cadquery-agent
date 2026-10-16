@@ -86,7 +86,7 @@
       <div id="viewer">
         <div id="busy-bar" class="busy-bar" hidden></div>
         <div id="empty"><div><svg class="icon"><use href="#i-box"/></svg><br><strong>Build one step at a time</strong><br>Type, speak or draw a part below.<br>Drag to rotate · scroll to zoom</div></div>
-        <div id="viewer-loading" class="viewer-loading" hidden><svg class="icon small spin"><use href="#i-loader"/></svg>Loading model</div>
+        <div id="viewer-loading" class="viewer-loading" hidden><svg class="icon small spin"><use href="#i-loader"/></svg><span id="viewer-loading-text">Loading model</span></div>
         <div id="arrange-tray" class="tray" hidden>
           <span class="label">Add part</span>
           <div id="part-list" class="part-list"></div>
@@ -160,6 +160,22 @@
         <button id="reset-code" disabled title="Discard your edits"><svg class="icon"><use href="#i-undo"/></svg>Reset</button>
         <button id="copy" title="Copy code"><svg class="icon"><use href="#i-copy"/></svg>Copy</button>
       </div>
+      <section id="params" class="params" hidden>
+        <div class="params-head">
+          <button id="params-toggle" class="ghost params-toggle" type="button" aria-expanded="true" aria-controls="params-body" title="Show or hide parameters">
+            <svg class="icon small"><use href="#i-chevron"/></svg><span class="label">Parameters</span><span id="params-count" class="count"></span>
+          </button>
+          <div class="params-actions">
+            <button id="params-discard" type="button" title="Go back to the selected revision" hidden><svg class="icon small"><use href="#i-undo"/></svg>Discard</button>
+            <button id="params-save" class="primary" type="button" title="Save these values as a new revision" hidden><svg class="icon small"><use href="#i-check"/></svg>Save as revision</button>
+          </div>
+        </div>
+        <div id="params-body" class="params-body">
+          <p class="params-hint">Drag a value to reshape the part. Nothing is saved until you press Save.</p>
+          <p id="params-error" class="params-error" role="alert" hidden></p>
+          <fieldset id="param-list" class="param-list"></fieldset>
+        </div>
+      </section>
       <div class="editor">
         <pre id="lines">1</pre>
         <textarea id="code" spellcheck="false" aria-label="Editable CadQuery Python"></textarea>

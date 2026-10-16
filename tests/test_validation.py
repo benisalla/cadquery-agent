@@ -2,6 +2,7 @@ from cadquery_agent.validation import (
     check_geometry,
     ensure_result,
     extract_python_code,
+    lint_cadquery,
     validate_cadquery_source,
 )
 
@@ -81,3 +82,16 @@ def test_ensure_result_aliases_the_last_assigned_object() -> None:
     assert fixed.endswith("result = plate")
     assert validate_cadquery_source(fixed).is_valid
     assert ensure_result(fixed) == fixed
+
+
+def test_lint_catches_radius_and_diameter_mix_ups() -> None:
+    source = """import cadquery as cq
+hole_diameter = 6
+boss_diameter = 24
+plate = cq.Workplane('XY').box(10, 10, 2).faces('>Z').workplane().hole(hole_diameter / 2)
+boss = cq.Workplane('XY').circle(boss_diameter).extrude(5)
+result = plate"""
+    problems = lint_cadquery(source)
+    assert "line 4: hole() takes the full diameter; do not divide by 2" in problems
+    assert "line 5: circle() takes a radius; use boss_diameter / 2" in problems
+    assert lint_cadquery("import cadquery as cq\nresult = cq.Workplane('XY').circle(r)") == ()

@@ -27,6 +27,7 @@ class RecordingAgent:
         prompt: str = "",
         image=None,
         existing_source: str | None = None,
+        existing_size=None,
         model: str | None = None,
         vision_model: str | None = None,
         on_event=None,

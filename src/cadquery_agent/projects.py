@@ -133,6 +133,7 @@ class ProjectWorkflow:
                 prompt=instruction,
                 image=image,
                 existing_source=self._base_source(project, base_revision),
+                existing_size=self._base_size(project, base_revision),
                 model=model,
                 vision_model=vision_model,
                 on_event=on_event,
@@ -187,6 +188,13 @@ class ProjectWorkflow:
                 trace=[[]],
             )
             return self.store.append(project_id, revision), revision
+
+    def _base_size(self, project: CadProject, number: int | None) -> list[float] | None:
+        selected = number or (project.revisions[-1].number if project.revisions else None)
+        for revision in project.revisions:
+            if revision.number == selected:
+                return [round(value, 1) for value in revision.size] or None
+        return None
 
     def _base_source(self, project: CadProject, number: int | None) -> str | None:
         if not project.revisions:

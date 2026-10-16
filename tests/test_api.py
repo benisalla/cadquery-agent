@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from cadquery_agent.agent import Attempt, GenerationError, GenerationResult
-from cadquery_agent.api import app, get_project_store, get_project_workflow
+from cadquery_agent.api import app, get_project_store, get_project_workflow, get_renderer
 from cadquery_agent.projects import ProjectStore, ProjectWorkflow
 from cadquery_agent.rendering import RenderResult
 from cadquery_agent.settings import get_settings
@@ -31,6 +31,7 @@ class FakeAgent:
         prompt: str = "",
         image=None,
         existing_source: str | None = None,
+        existing_size=None,
         model: str | None = None,
         vision_model: str | None = None,
         on_event=None,
@@ -176,3 +177,17 @@ def test_step_stream_reports_failures_as_an_error_event(tmp_path) -> None:
     last = json.loads(response.text.splitlines()[-1])
     assert last == {"event": "error", "status": 502, "detail": last["detail"]}
     assert "boom" in last["detail"]
+
+
+def test_preview_renders_without_saving_a_revision(tmp_path) -> None:
+    app.dependency_overrides[get_renderer] = lambda: FakeRenderer()
+    try:
+        with TestClient(app) as client:
+            ok = client.post("/preview", json={"code": BOX})
+            bad = client.post("/preview", json={"code": "import os"})
+    finally:
+        app.dependency_overrides.clear()
+    assert ok.status_code == 200
+    assert ok.json()["size"] == [1.0, 2.0, 3.0]
+    assert ok.json()["stl_url"].endswith("/model.stl")
+    assert bad.status_code == 422
