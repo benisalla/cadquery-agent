@@ -187,3 +187,13 @@ def test_revision_task_states_the_current_measured_size() -> None:
         )
     )
     assert "The current part measures 100 x 60 x 8 mm" in backend.calls[0][0][1]["content"]
+
+
+def test_unrequested_outline_change_is_questioned_once() -> None:
+    backend = FakeBackend([BOX, BOX])
+    agent = CadQueryAgent(backend, model="coder", renderer=FakeRenderer([]))
+    result = asyncio.run(
+        agent.generate(prompt="add a fillet", existing_source=BOX, existing_size=[5.0, 5.0, 3.0])
+    )
+    assert result.attempts == 2
+    assert "the outline changed from 5 x 5 mm to 1 x 2 mm" in result.trace[0].problems[0]

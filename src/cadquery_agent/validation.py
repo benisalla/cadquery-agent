@@ -150,3 +150,26 @@ def check_geometry(stats: dict) -> tuple[str, ...]:
     if stats.get("volume", 0) <= 0:
         problems.append("the solid has no volume")
     return tuple(problems)
+
+
+def check_footprint(
+    request: str, before: list[float] | None, after: list[float]
+) -> tuple[str, ...]:
+    """Flag a revision that changes the part's outline although the request gave no such size."""
+    resize = r"\b(longer|shorter|wider|narrower|bigger|smaller|larger|scale|extend)"
+    if not before or not after or re.search(resize, request, re.IGNORECASE):
+        return ()
+    numbers = {float(n) for n in re.findall(r"\d+(?:\.\d+)?", request)}
+    for old, new in zip(before[:2], after[:2], strict=True):
+        change = abs(new - old)
+        explained = any(abs(n - v) < 0.5 for n in numbers for v in (new, change / 2))
+        if change > 0.5 and not explained:
+            old_size = " x ".join(f"{v:g}" for v in before[:2])
+            new_size = " x ".join(f"{round(v, 1):g}" for v in after[:2])
+            problem = (
+                f"the outline changed from {old_size} mm to {new_size} mm, but the request "
+                "did not ask for that; build new features on the existing part "
+                "(the part is centered on the origin)"
+            )
+            return (problem,)
+    return ()

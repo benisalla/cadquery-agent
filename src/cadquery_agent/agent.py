@@ -10,6 +10,7 @@ from cadquery_agent.rendering import (
     WorkerUnavailableError,
 )
 from cadquery_agent.validation import (
+    check_footprint,
     check_geometry,
     ensure_result,
     extract_python_code,
@@ -29,7 +30,12 @@ Rules:
 - Never read or write files, use the network, or call show(), show_object() or export().
 
 CadQuery facts small models get wrong:
-- box(x, y, z) is centered on the origin.
+- box(x, y, z) and rect(w, h) are centered on the origin: a 100 x 60 plate spans x -50..50
+  and y -30..30. Never use corner coordinates like (10, 10).
+- Four holes, each m mm from the edges of an L x W plate:
+  .faces('>Z').workplane().rect(L - 2 * m, W - 2 * m, forConstruction=True).vertices().hole(d)
+- A new body started with cq.Workplane('XY') begins at z = 0, inside the part. To add a feature
+  on top, start from result.faces('>Z').workplane().
 - circle(radius) takes a radius, while hole(diameter) takes only a diameter and cuts through.
 - Make holes with hole(diameter); never extrude a circle for a hole, that adds material.
 - For cylinders use circle(radius).extrude(height).
@@ -154,6 +160,7 @@ class CadQueryAgent:
         conversation = [{"role": "system", "content": SYSTEM_PROMPT}, user_message(task)]
         messages = conversation
         trace: list[Attempt] = []
+        footprint_checked = False
         for attempt in range(1, self.max_attempts + 1):
             step = {"attempt": attempt, "max_attempts": self.max_attempts}
             emit({"event": "stage", "stage": "write", **step})
@@ -163,6 +170,10 @@ class CadQueryAgent:
             problems, render = lint_cadquery(code), None
             if not problems:
                 problems, render = await check_script(code, self.renderer)
+            if not problems and render and existing_size and not footprint_checked:
+                # Asked once: if the model keeps the new outline, it is taken as intended.
+                problems = check_footprint(prompt, existing_size, render.stats.get("size"))
+                footprint_checked = True
             trace.append(Attempt(code, problems))
             if not problems:
                 return GenerationResult(code, model, tuple(trace), render, sketch_description)

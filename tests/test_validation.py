@@ -1,4 +1,5 @@
 from cadquery_agent.validation import (
+    check_footprint,
     check_geometry,
     ensure_result,
     extract_python_code,
@@ -95,3 +96,13 @@ result = plate"""
     assert "line 4: hole() takes the full diameter; do not divide by 2" in problems
     assert "line 5: circle() takes a radius; use boss_diameter / 2" in problems
     assert lint_cadquery("import cadquery as cq\nresult = cq.Workplane('XY').circle(r)") == ()
+
+
+def test_check_footprint_flags_unrequested_outline_change():
+    request = "Add a 24 mm boss, 12 mm tall, on top."
+    assert check_footprint(request, [100, 60, 8], [100, 60, 20]) == ()
+    assert "100 x 60 mm to 112 x 72 mm" in check_footprint(request, [100, 60, 8], [112, 72, 20])[0]
+    assert check_footprint("Make it 120 mm long.", [100, 60, 8], [120, 60, 8]) == ()
+    assert check_footprint("Make it 20 mm longer.", [100, 60, 8], [120, 60, 8]) == ()
+    assert check_footprint("Add a 10 mm tab on each side.", [100, 60, 8], [120, 60, 8]) == ()
+    assert check_footprint(request, None, [112, 72, 20]) == ()

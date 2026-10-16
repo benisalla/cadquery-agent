@@ -3,8 +3,9 @@ import base64
 import json
 
 import httpx
+import pytest
 
-from cadquery_agent.backend import OpenAICompatibleBackend, user_message
+from cadquery_agent.backend import ModelServerError, OpenAICompatibleBackend, user_message
 from cadquery_agent.images import ImageInput
 from cadquery_agent.settings import Settings
 
@@ -61,3 +62,13 @@ def test_cloud_models_are_listed_only_with_a_token() -> None:
     both = asyncio.run(OpenAICompatibleBackend(Settings(hf_token="t"), transport).list_models())
     assert local == ["qwen2.5-coder:3b"]
     assert "hf:Qwen/Qwen2.5-Coder-32B-Instruct" in both
+
+
+def test_slow_model_reports_a_timeout_not_an_unreachable_server() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("slow", request=request)
+
+    settings = Settings(timeout_seconds=90)
+    backend = OpenAICompatibleBackend(settings, transport=httpx.MockTransport(handler))
+    with pytest.raises(ModelServerError, match="took longer than 90 s"):
+        asyncio.run(backend.chat([user_message("hi")], "coder"))

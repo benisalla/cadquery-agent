@@ -87,6 +87,12 @@ class OpenAICompatibleBackend:
                 transport=self.transport,
             ) as client:
                 response = await client.request(method, path, **kwargs)
+        except httpx.TimeoutException as error:
+            seconds = self.settings.timeout_seconds
+            raise ModelServerError(
+                f"the model took longer than {seconds:g} s; the computer may be busy, "
+                "try again or pick a smaller model"
+            ) from error
         except httpx.HTTPError as error:
             raise ModelServerError(f"model server is unreachable: {error}") from error
         if response.is_error:
